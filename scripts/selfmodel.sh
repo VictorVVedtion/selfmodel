@@ -460,13 +460,32 @@ cmd_adapt() {
 
 # ─── CMD: update ──────────────────────────────────────────────────────────────
 cmd_update() {
-    local dir="${1:-.}"
+    local dir="."
+    local remote=false
+    local version="main"
+
+    # Parse flags
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --remote)  remote=true; shift ;;
+            --version) version="$2"; shift 2 ;;
+            *)         dir="$1"; shift ;;
+        esac
+    done
+
     info "Updating selfmodel playbook in $(bold "$dir")"
 
     if [[ ! -d "$dir/.selfmodel" ]]; then
         err "No .selfmodel/ found. Run 'selfmodel init' or 'selfmodel adapt' first."
         exit 1
     fi
+
+    if [[ "$remote" == "true" ]]; then
+        remote_update "$dir" "$version"
+        return $?
+    fi
+
+    # ── Local update (original behavior) ─────────────────────────────────────
 
     # Re-detect stack (project may have evolved)
     detect_stack "$dir"
@@ -504,6 +523,139 @@ cmd_update() {
 
     echo ""
     ok "selfmodel updated to $SELFMODEL_VERSION!"
+}
+
+# ─── Remote Update ──────────────────────────────────────────────────────────
+# Download latest playbook + hooks from GitHub tarball and sync to local
+remote_update() {
+    local dir="${1:-.}"
+    local version="${2:-main}"
+    local repo="VictorVVedtion/selfmodel"
+    local tmp_dir
+    tmp_dir=$(mktemp -d)
+    local ts
+    ts=$(date +%s)
+
+    # Determine tarball URL: tags use /tags/, branches use /heads/
+    local tarball_url
+    if [[ "$version" == v* ]]; then
+        tarball_url="https://github.com/$repo/archive/refs/tags/$version.tar.gz"
+    else
+        tarball_url="https://github.com/$repo/archive/refs/heads/$version.tar.gz"
+    fi
+
+    info "Fetching selfmodel $version from GitHub..."
+    info "URL: $tarball_url"
+
+    # 1. Download tarball to temp directory
+    if ! curl -f -sS -L --connect-timeout 10 --max-time 60 \
+         "$tarball_url" | tar -xz -C "$tmp_dir" 2>/dev/null; then
+        err "Failed to download from GitHub. Local files unchanged."
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    # 2. Find extracted root directory (selfmodel-main/ or selfmodel-v1.0.0/)
+    local extracted
+    extracted=$(ls -d "$tmp_dir"/selfmodel-* 2>/dev/null | head -1)
+    if [[ -z "$extracted" || ! -d "$extracted" ]]; then
+        err "Unexpected archive structure. Local files unchanged."
+        rm -rf "$tmp_dir"
+        return 1
+    fi
+
+    ok "Downloaded and extracted successfully."
+
+    # 3. Sync playbook/*.md (backup → overwrite)
+    local sync_count=0
+    if [[ -d "$extracted/.selfmodel/playbook" ]]; then
+        mkdir -p "$dir/.selfmodel/playbook"
+        for f in "$extracted/.selfmodel/playbook/"*.md; do
+            [[ -f "$f" ]] || continue
+            local name
+            name=$(basename "$f")
+            local target="$dir/.selfmodel/playbook/$name"
+            if [[ -f "$target" ]]; then
+                cp "$target" "${target}.bak.${ts}"
+                info "Backed up: playbook/$name → .bak.${ts}"
+            fi
+            cp "$f" "$target"
+            ok "Updated: playbook/$name"
+            sync_count=$((sync_count + 1))
+        done
+    else
+        warn "No playbook/ found in remote archive."
+    fi
+
+    # 4. Sync hooks/*.sh (backup → overwrite → chmod)
+    if [[ -d "$extracted/scripts/hooks" ]]; then
+        mkdir -p "$dir/scripts/hooks"
+        for f in "$extracted/scripts/hooks/"*.sh; do
+            [[ -f "$f" ]] || continue
+            local name
+            name=$(basename "$f")
+            local target="$dir/scripts/hooks/$name"
+            if [[ -f "$target" ]]; then
+                cp "$target" "${target}.bak.${ts}"
+                info "Backed up: hooks/$name → .bak.${ts}"
+            fi
+            cp "$f" "$target"
+            chmod +x "$target"
+            ok "Updated: hooks/$name"
+            sync_count=$((sync_count + 1))
+        done
+    else
+        warn "No scripts/hooks/ found in remote archive."
+    fi
+
+    # 5. Sync selfmodel.sh itself (backup → overwrite → chmod)
+    if [[ -f "$extracted/scripts/selfmodel.sh" ]]; then
+        local target="$dir/scripts/selfmodel.sh"
+        if [[ -f "$target" ]]; then
+            cp "$target" "${target}.bak.${ts}"
+            info "Backed up: selfmodel.sh → .bak.${ts}"
+        fi
+        cp "$extracted/scripts/selfmodel.sh" "$target"
+        chmod +x "$target"
+        ok "Updated: selfmodel.sh"
+        sync_count=$((sync_count + 1))
+    fi
+
+    # 6. Update VERSION file
+    if [[ -f "$extracted/VERSION" ]]; then
+        cp "$extracted/VERSION" "$dir/VERSION"
+        ok "VERSION updated to $(cat "$dir/VERSION")"
+    fi
+
+    # 7. CLAUDE.md — only update selfmodel:start/end block if markers exist
+    if [[ -f "$extracted/CLAUDE.md" && -f "$dir/CLAUDE.md" ]]; then
+        if grep -q '<!-- selfmodel:start -->' "$dir/CLAUDE.md" 2>/dev/null \
+           && grep -q '<!-- selfmodel:start -->' "$extracted/CLAUDE.md" 2>/dev/null; then
+            # Extract new block from remote
+            local new_block
+            new_block=$(sed -n '/<!-- selfmodel:start -->/,/<!-- selfmodel:end -->/p' "$extracted/CLAUDE.md")
+            if [[ -n "$new_block" ]]; then
+                cp "$dir/CLAUDE.md" "$dir/CLAUDE.md.bak.${ts}"
+                # Remove old block
+                sed_inplace '/<!-- selfmodel:start -->/,/<!-- selfmodel:end -->/d' "$dir/CLAUDE.md"
+                # Append new block
+                echo "$new_block" >> "$dir/CLAUDE.md"
+                ok "CLAUDE.md selfmodel block updated (user content preserved)."
+                sync_count=$((sync_count + 1))
+            fi
+        else
+            info "CLAUDE.md: no selfmodel markers found. Skipped (manual sync needed)."
+        fi
+    fi
+
+    # 8. NOT synced: state/, contracts/, inbox/ (project-specific data)
+    #    These directories contain per-project state and must not be overwritten.
+
+    # 9. Cleanup
+    rm -rf "$tmp_dir"
+
+    echo ""
+    ok "Remote update complete! ($version, $sync_count files synced)"
 }
 
 # ─── CMD: version ─────────────────────────────────────────────────────────────
@@ -1256,13 +1408,17 @@ main() {
             echo "  init     Initialize selfmodel in a new or existing project"
             echo "  adapt    Adapt selfmodel to an existing project (non-destructive)"
             echo "  update   Update playbook files to latest version"
+            echo "             --remote    Fetch latest from GitHub (instead of local templates)"
+            echo "             --version   Specify version/tag (default: main)"
             echo "  version  Show version"
             echo ""
             echo "Examples:"
-            echo "  selfmodel init                # Initialize in current directory"
-            echo "  selfmodel init ./my-project   # Initialize in specific directory"
-            echo "  selfmodel adapt               # Adapt to existing project"
-            echo "  selfmodel update              # Update playbook to latest"
+            echo "  selfmodel init                       # Initialize in current directory"
+            echo "  selfmodel init ./my-project          # Initialize in specific directory"
+            echo "  selfmodel adapt                      # Adapt to existing project"
+            echo "  selfmodel update                     # Update playbook from local templates"
+            echo "  selfmodel update --remote            # Fetch latest from GitHub (main branch)"
+            echo "  selfmodel update --remote --version v0.3.0  # Fetch specific version"
             ;;
         *)
             err "Unknown command: $cmd"
