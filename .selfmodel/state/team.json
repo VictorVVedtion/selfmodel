@@ -1,0 +1,43 @@
+{
+  "current_sprint": 0,
+  "session_count": 1,
+  "created": "2026-03-28T00:00:00Z",
+  "agents": {
+    "gemini": {
+      "status": "idle",
+      "role": "frontend_colleague",
+      "sprints_completed": 0,
+      "avg_score": 0,
+      "last_sprint": null,
+      "last_score": null
+    },
+    "codex": {
+      "status": "idle",
+      "role": "backend_intern",
+      "sprints_completed": 0,
+      "avg_score": 0,
+      "last_sprint": null,
+      "last_score": null
+    },
+    "opus": {
+      "status": "idle",
+      "role": "senior_fullstack",
+      "sprints_completed": 0,
+      "avg_score": 0,
+      "last_sprint": null,
+      "last_score": null
+    }
+  },
+  "evolution": {
+    "last_review_sprint": 0,
+    "protocol_version": "0.1.0",
+    "experiments_active": []
+  },
+  "skills_evaluated": {},
+  "worktrees_active": [],
+  "meta": {
+    "state_version": 1,
+    "last_modified": "2026-03-28T00:00:00Z",
+    "last_modified_by": "init"
+  }
+}
