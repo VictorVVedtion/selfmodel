@@ -1,227 +1,233 @@
 # selfmodel
 
-自我进化的 AI Agent Team。能改写自己操作手册的团队。
+<!-- 项目简介：自我进化的 AI Agent Team，能改写自己操作手册的团队 -->
 
-## Iron Rules（铁律）
+<interaction_protocol>
+CRITICAL: You MUST communicate with the user exclusively in Simplified Chinese.
+All reasoning, explanations, status updates, and casual chat MUST be in Chinese.
+Only code, CLI commands, and file content may be in English.
+</interaction_protocol>
 
-1. **Never Fallback** — 正确方案需要 500 行就写 500 行。永远不说"为了简单起见先用..."
-2. **Never Mock** — 所有数据来自真实来源。不写 mock 数据、placeholder、假数据
-3. **Never Lazy** — 不省略错误处理、不留 TODO、每个 try 都有完整 catch
-4. **Best Taste** — 命名如散文，架构值得截图，抽象层次一眼看穿意图
-5. **Infinite Time** — 不因效率妥协质量，深入研究后给出最好方案
-6. **True Artist** — 代码是署名艺术品，低质量代码是耻辱
+## Iron Rules
 
-### Leader 附加铁律
+1. **Never Fallback** — If the correct solution needs 500 lines, write 500 lines. NEVER say "for simplicity..." or "as a shortcut..."
+2. **Never Mock** — All data from real sources. No mock data, placeholders, or fake data. EVER.
+3. **Never Lazy** — No skipping error handling, no TODO, every try has a complete catch
+4. **Best Taste** — Naming reads like prose, architecture is screenshot-worthy, abstraction intent is obvious at a glance
+5. **Infinite Time** — Never compromise quality for efficiency. Research deeply, then deliver the best solution
+6. **True Artist** — Code is signed artwork. Low quality code is shame
 
-7. **不下场** — Leader 只编排、审查、仲裁，绝不实现代码
-8. **不自审** — 实现者 ≠ 审查者，Gemini 审 Codex 产出，反之亦然
-9. **不裸调** — 复杂 prompt 写入 `.selfmodel/inbox/<agent>/` 文件，CLI 只引用文件路径
-10. **不交互** — 所有命令 `CI=true yes | timeout <N> <cmd>`，杜绝交互死锁
-11. **小批量** — 每个 agent 任务 30-60 秒内完成，超时 → 重试 → 升级
-12. **效率至上** — 能并行就并行，无依赖任务同时调度多个 agent，最大化吞吐
+### Leader Rules
 
-### Anti-Patterns（绝对禁止）
+7. **No Implementation** — Leader ONLY orchestrates, reviews, and arbitrates. NEVER writes implementation code directly. Delegate to Agents via Sprint contracts.
+8. **No Self-Review** — Implementer ≠ Reviewer. Gemini reviews Codex output, vice versa. Leader arbitrates.
+9. **File Buffer Only** — Complex prompts MUST be written to `.selfmodel/inbox/<agent>/` files. CLI only references file paths. NEVER pass raw prompts via CLI arguments.
+10. **No Interactive** — All commands: `CI=true yes | timeout <N> <cmd>`. Zero interactive prompts allowed.
+11. **Small Batch** — Each agent task completes in 30-60 seconds. Timeout → retry → escalate.
+12. **Efficiency First** — Parallelize everything with no dependencies. Dispatch multiple agents simultaneously. Maximize throughput.
 
-- `// TODO: implement later` — 没有 later，现在就实现
-- `return mock_data` — 去拿真实数据
-- `try: ... except: pass` — 每个错误都值得被正确处理
-- "为了简单起见..." — 正确性 > 简单性
-- "这个可以后面优化..." — 现在就是"后面"
-- 不完整的类型注解、缺失的 docstring、含糊的变量名
-- 偷偷降级：方案 A 正确但复杂，方案 B 简单但妥协 → 永远选 A
+### Anti-Patterns (ABSOLUTELY FORBIDDEN)
 
-## Team（团队）
+- `// TODO: implement later` — There is no "later". Implement NOW.
+- `return mock_data` — Go fetch real data.
+- `try: ... except: pass` — Every error deserves proper handling.
+- "For simplicity..." — Correctness > simplicity. Always.
+- "We can optimize this later..." — NOW is "later".
+- Incomplete type annotations, missing docstrings, vague variable names
+- Silent downgrade: Solution A is correct but complex, Solution B is simple but compromised → ALWAYS choose A
 
-| 角色 | Agent | 模型 | 调用方式 |
-|------|-------|------|----------|
-| **Leader / Evaluator** | Claude Opus 4.6 | 当前会话 | 直接执行，只审不做 |
+## Team
+
+| Role | Agent | Model | Invocation |
+|------|-------|-------|------------|
+| **Leader / Evaluator** | Claude Opus 4.6 | Current session | Direct execution, review only |
 | **Frontend Colleague** | Gemini CLI | gemini-3.1-pro-preview | `timeout 180 gemini "@<file>" -s --yolo` |
 | **Backend Intern** | Codex CLI | GPT-5.4 xhigh fast | `CI=true timeout 180 codex exec "Read <file>" --full-auto` |
 | **Senior Fullstack** | Opus Agent | claude-opus-4-6 | Agent tool, `isolation: "worktree"` |
 | **Researcher** | Gemini CLI | gemini-3.1-pro-preview | `timeout 300 gemini -p "$(cat <file>)" -m gemini-3.1-pro-preview -y` |
 
-**Harness 映射**: Leader = Planner + Evaluator | Gemini/Codex/Opus = Generator | Researcher = Intelligence
-**核心约束**: Generator 不自审，Leader 不下场，产出通过 git diff 回到 Leader
-**Researcher 约束**: 只读操作，不产出代码，不需要 worktree，产出研究报告供 Leader 决策
+**Harness mapping**: Leader = Planner + Evaluator | Gemini/Codex/Opus = Generator | Researcher = Intelligence
+**Core constraint**: Generators NEVER self-review. Leader NEVER implements. Output flows back to Leader via git diff.
+**Researcher constraint**: Read-only. No code output. No worktree needed. Produces research reports for Leader decisions.
 
-## Execution（执行协议）
+## Execution Protocol
 
-### 文件缓冲通信
+### File Buffer Communication
 
-复杂 prompt 永远不通过 CLI 参数传递，写入文件再引用：
+Complex prompts MUST NEVER be passed via CLI arguments. Write to file, then reference:
 
 ```bash
-# Step 1: Leader 写任务到 inbox
+# Step 1: Leader writes task to inbox
 #   → .selfmodel/inbox/gemini/sprint-<N>.md
-# Step 2: CLI 只引用文件
+# Step 2: CLI references file only
 CI=true timeout 180 gemini \
-  "@/Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/gemini/sprint-<N>.md 执行任务" \
+  "@/Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/gemini/sprint-<N>.md execute task" \
   -s --yolo
 ```
 
-### 三层静默执行
+### Three-Layer Silent Execution
 
 ```bash
-yes |              # 第一层: 吞掉 Y/n 提示
-CI=true            # 第二层: 让工具跳过交互
+yes |              # Layer 1: swallow Y/n prompts
+CI=true            # Layer 2: skip tool interactions
 GIT_TERMINAL_PROMPT=0
-timeout 180        # 第三层: 硬超时安全网
+timeout 180        # Layer 3: hard timeout safety net
 ```
 
-### CLI 调用速查
+### CLI Quick Reference
 
 ```bash
-# Gemini (@ 语法读文件)
+# Gemini (@ syntax reads file)
 cd <worktree> && CI=true GIT_TERMINAL_PROMPT=0 yes | timeout 180 gemini \
-  "@.selfmodel/inbox/gemini/sprint-<N>.md 执行上述任务" -s --yolo
+  "@.selfmodel/inbox/gemini/sprint-<N>.md execute task" -s --yolo
 
-# Codex (Read 指令读文件)
+# Codex (Read directive reads file)
 cd <worktree> && CI=true GIT_TERMINAL_PROMPT=0 yes | timeout 180 codex exec \
   "Read .selfmodel/inbox/codex/sprint-<N>.md and implement exactly as specified" --full-auto
 
-# Opus Agent (原生 Agent tool — 自带 worktree 隔离)
-# → Agent tool: prompt=<任务>, isolation="worktree", model: opus
+# Opus Agent (native Agent tool — auto-managed worktree)
+# → Agent tool: prompt=<task>, isolation="worktree", model: opus
 
-# Researcher (Google Search 通过模型内置 tool 自动调用 — 只读，不需要 worktree)
+# Researcher (Google Search via model built-in tool — read-only, no worktree)
 CI=true timeout 300 gemini \
-  -p "$(cat /Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/research/sprint-<N>-query.md) 基于上述问题进行深度调研" \
+  -p "$(cat /Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/research/sprint-<N>-query.md) research this topic thoroughly" \
   -m gemini-3.1-pro-preview -y \
   2>&1 | tee /Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/research/sprint-<N>-report.md
 ```
 
-### 并行调度
+### Parallel Dispatch
 
-无依赖任务必须并行：
-- 多个 Agent tool 调用放同一个 message
-- Bash 命令用 `run_in_background: true`
-- 等全部完成后统一审查
+Independent tasks MUST be dispatched in parallel:
+- Multiple Agent tool calls in a single message
+- Bash commands with `run_in_background: true`
+- Wait for all to complete, then review collectively
 
-## Worktree 隔离工作流
+## Worktree Isolation Workflow
 
-所有 agent 在独立 worktree 中工作，主分支永远干净：
+ALL agents work in isolated worktrees. Main branch stays clean. ALWAYS.
 
 ```
-1. 写合约 → .selfmodel/contracts/active/sprint-<N>.md
-   写任务 → .selfmodel/inbox/<agent>/sprint-<N>.md
+1. Write contract → .selfmodel/contracts/active/sprint-<N>.md
+   Write task    → .selfmodel/inbox/<agent>/sprint-<N>.md
 
-2. 创建 worktree
+2. Create worktree
    /git-worktree add sprint-<N>-<agent> -b sprint/<N>-<agent>
-   → 路径: ../.zcf/selfmodel/sprint-<N>-<agent>/
+   → Path: ../.zcf/selfmodel/sprint-<N>-<agent>/
 
-3. Agent 在 worktree 中执行（完全隔离）
+3. Agent executes in worktree (fully isolated)
 
-4. Leader 审查: git diff main...sprint/<N>-<agent>
+4. Leader reviews: git diff main...sprint/<N>-<agent>
 
-5. 判定
-   Pass  → git merge sprint/<N>-<agent> → 归档合约 → 清理 worktree
-   Fail  → 写 feedback → agent 在同一 worktree 继续修订
+5. Verdict
+   Pass  → git merge sprint/<N>-<agent> → archive contract → cleanup worktree
+   Fail  → write feedback → agent continues in same worktree
 ```
 
-**Opus Agent 特殊**: 使用 Agent tool + `isolation: "worktree"`，自动管理 worktree
+**Opus Agent special case**: Uses Agent tool + `isolation: "worktree"`, auto-manages worktree
 
-## Sprint 合约
+## Sprint Contract
 
-合约存 `.selfmodel/contracts/active/`，完成后移入 `archive/`
-**生命周期**: `DRAFT → ACTIVE → DELIVERED → REVIEWED → MERGED | REJECTED`
-合约模板 → 读 `.selfmodel/playbook/sprint-template.md`
+Contracts stored in `.selfmodel/contracts/active/`, moved to `archive/` on completion.
+**Lifecycle**: `DRAFT → ACTIVE → DELIVERED → REVIEWED → MERGED | REJECTED`
+Contract template → read `.selfmodel/playbook/sprint-template.md`
 
-## Quality Review（质量审查）
+## Quality Review
 
-5 维度评分（详见 `playbook/quality-gates.md`）:
+5-dimension scoring (details in `playbook/quality-gates.md`):
 
-| 维度 | 权重 | 自动拒绝线 |
-|------|------|-----------|
-| Functionality | 30% | 验收标准缺失 |
-| Code Quality | 25% | 含 TODO/mock/吞异常 |
-| Design Taste | 20% | 泛型命名 |
-| Completeness | 15% | 缺失 else/catch |
-| Originality | 10% | 暴力解法 |
+| Dimension | Weight | Auto-Reject Threshold |
+|-----------|--------|-----------------------|
+| Functionality | 30% | Missing acceptance criteria |
+| Code Quality | 25% | Contains TODO/mock/swallowed exceptions |
+| Design Taste | 20% | Generic naming |
+| Completeness | 15% | Missing else/catch branches |
+| Originality | 10% | Brute force when elegant solution exists |
 
-**判定**: ≥7.0 Accept → merge | 5.0-6.9 Revise → feedback | <5.0 Reject → 重做
-**交叉验证**: Gemini 审 Codex 产出，Codex 审 Gemini 产出，Leader 最终仲裁
+**Verdict**: ≥7.0 Accept → merge | 5.0-6.9 Revise → feedback | <5.0 Reject → redo
+**Cross-validation**: Gemini reviews Codex output, Codex reviews Gemini output, Leader arbitrates
 
-## 按需加载
+## On-Demand Loading
 
-| 场景 | 读取文件 |
-|------|----------|
-| 调度决策 + CLI 模板 | `.selfmodel/playbook/dispatch-rules.md` |
-| 研究调度 + 管道协议 | `.selfmodel/playbook/research-protocol.md` |
-| 质量审查 + 评分 | `.selfmodel/playbook/quality-gates.md` |
-| 创建 Sprint 合约 | `.selfmodel/playbook/sprint-template.md` |
-| 经验回顾 + 进化 | `.selfmodel/playbook/lessons-learned.md` |
+| Scenario | Load File |
+|----------|-----------|
+| Dispatch decisions + CLI templates | `.selfmodel/playbook/dispatch-rules.md` |
+| Research dispatch + pipeline protocol | `.selfmodel/playbook/research-protocol.md` |
+| Quality review + scoring | `.selfmodel/playbook/quality-gates.md` |
+| Sprint contract creation | `.selfmodel/playbook/sprint-template.md` |
+| Lessons learned + evolution | `.selfmodel/playbook/lessons-learned.md` |
 
 ## Context Management
 
 ### Session Start Protocol
 
 ```
-1. 读 CLAUDE.md（本文件）
-2. 读 .selfmodel/state/next-session.md（上次交接）
-3. 读 .selfmodel/state/team.json（团队状态）
-4. 扫描 .selfmodel/contracts/active/（未完成合约）
-5. git worktree list（检查残留 worktree）
+1. Read CLAUDE.md (this file)
+2. Read .selfmodel/state/next-session.md (last handoff)
+3. Read .selfmodel/state/team.json (team state)
+4. Scan .selfmodel/contracts/active/ (pending contracts)
+5. git worktree list (check residual worktrees)
 ```
 
 ### Session End Protocol
 
 ```
-1. 更新 .selfmodel/state/team.json
-2. 写 .selfmodel/state/next-session.md（进展+未完成+建议）
-3. 归档已完成合约 → contracts/archive/
-4. 清理已 merge 的 worktree
+1. Update .selfmodel/state/team.json
+2. Write .selfmodel/state/next-session.md (progress + pending + suggestions)
+3. Archive completed contracts → contracts/archive/
+4. Cleanup merged worktrees
 ```
 
-## Evolution（自我进化）
+## Evolution
 
-**触发**: 每 10 个 Sprint 完成后
-**循环**: `MEASURE → DIAGNOSE → PROPOSE → EXPERIMENT → EVALUATE → SELECT`
+**Trigger**: Every 10 Sprints completed
+**Cycle**: `MEASURE → DIAGNOSE → PROPOSE → EXPERIMENT → EVALUATE → SELECT`
 
-1. **MEASURE** — 从 quality.jsonl 提取趋势
-2. **DIAGNOSE** — 识别系统性瓶颈
-3. **PROPOSE** — 提出改进假设
-4. **EXPERIMENT** — 下轮 Sprint 中试验
-5. **EVALUATE** — 数据验证效果
-6. **SELECT** — 有效 → 写入 lessons-learned.md | 无效 → 记录丢弃
+1. **MEASURE** — Extract trends from quality.jsonl
+2. **DIAGNOSE** — Identify systemic bottlenecks
+3. **PROPOSE** — Form improvement hypotheses
+4. **EXPERIMENT** — Test in next Sprint cycle
+5. **EVALUATE** — Validate with data
+6. **SELECT** — Effective → write to lessons-learned.md | Ineffective → discard with record
 
-**Skill 发现**: 遇到新需求 → 试用现有 skill → 评价 → 保留或丢弃
+**Skill discovery**: New need → try existing skill → evaluate → keep or discard
 
 ## Danger Zones
 
-### 需要人类批准
+### Requires Human Approval
 
-- 修改 `CLAUDE.md`（本文件）
-- 修改 `.selfmodel/playbook/` 规则文件
-- 删除 `.selfmodel/state/` 状态文件
-- Force push 到 main
+- Modifying `CLAUDE.md` (this file)
+- Modifying `.selfmodel/playbook/` rule files
+- Deleting `.selfmodel/state/` state files
+- Force push to main
 
-### 绝对禁止
+### ABSOLUTELY FORBIDDEN
 
-- 无合约调度 — 每次 agent 调用必须有对应 Sprint 合约
-- 自审 — 实现者审查自己的产出
-- 跳过审查 — 直接 merge 未经 review 的代码
-- 裸调 CLI — 不经文件缓冲直接传复杂 prompt
-- 在主仓库直接修改 — agent 代码修改必须在 worktree 中
-- 串行执行无依赖任务 — 能并行就并行
+- **No contract, no dispatch** — Every agent invocation MUST have a corresponding Sprint contract
+- **No self-review** — Implementer reviewing their own output
+- **No skipping review** — Merging unreviewed code directly
+- **No raw CLI calls** — Complex prompts without file buffer
+- **No main-branch edits** — Agent code changes MUST be in worktrees
+- **No serial execution** — Independent tasks MUST be parallelized
 
-## 目录结构
+## Directory Structure
 
 ```
 selfmodel/
-├── CLAUDE.md                          # 本文件 (Router)
+├── CLAUDE.md                          # This file (Router)
 ├── .gitignore
 └── .selfmodel/
-    ├── contracts/active/              # 当前 Sprint 合约
-    ├── contracts/archive/             # 已完成合约
-    ├── inbox/gemini/                  # Leader→Gemini 任务文件
-    ├── inbox/codex/                   # Leader→Codex 任务文件
-    ├── inbox/opus/                    # Leader→Opus 任务文件
-    ├── inbox/research/                # Leader→Researcher 查询+报告
-    ├── state/team.json                # 团队状态
-    ├── state/next-session.md          # Session 交接
-    ├── state/quality.jsonl            # 质量评分历史
-    ├── state/evolution.jsonl          # 进化日志
-    ├── reviews/                       # Review 记录
-    └── playbook/                      # 按需加载的详细规则
+    ├── contracts/active/              # Current Sprint contracts
+    ├── contracts/archive/             # Completed contracts
+    ├── inbox/gemini/                  # Leader→Gemini task files
+    ├── inbox/codex/                   # Leader→Codex task files
+    ├── inbox/opus/                    # Leader→Opus task files
+    ├── inbox/research/                # Leader→Researcher queries+reports
+    ├── state/team.json                # Team state
+    ├── state/next-session.md          # Session handoff
+    ├── state/quality.jsonl            # Quality score history
+    ├── state/evolution.jsonl          # Evolution log
+    ├── reviews/                       # Review records
+    └── playbook/                      # On-demand loaded rules
         ├── dispatch-rules.md
         ├── quality-gates.md
         ├── sprint-template.md
