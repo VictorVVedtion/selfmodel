@@ -18,4 +18,20 @@
 
 ## Log
 
-（空 — 通过进化循环自动填充。每 10 个 Sprint 执行 MEASURE → DIAGNOSE → PROPOSE → EXPERIMENT → EVALUATE → SELECT 流程后追加。）
+### Sprint 1: Gemini CLI -G flag 不存在
+- **Category**: tooling
+- **Lesson**: Gemini CLI 没有 `-G` flag。Google Search 是模型内置 tool，通过 `-y` (yolo) 模式自动调用
+- **Action**: 修正 research-protocol.md 和 CLAUDE.md 中所有 Researcher CLI 模板
+- **Result**: 改善 — Researcher 首次成功执行调研
+
+### Sprint 2: Researcher inbox 路径
+- **Category**: dispatch
+- **Lesson**: Researcher 用 gemini CLI 但 inbox 在 `inbox/research/` 而非 `inbox/gemini/`。enforce-agent-rules.sh 需同时检查两个目录
+- **Action**: 修正 enforce-agent-rules.sh gemini 检查逻辑
+- **Result**: 改善 — Researcher 调用不再被误拦截
+
+### Sprint 5: Worktree 路径混淆
+- **Category**: communication
+- **Lesson**: inbox 任务文件给了 main 仓库的绝对路径作为 Context Files，Agent 直接编辑了 main 的文件而非 worktree 副本。Leader cp worktree→main 时覆盖了 Agent 的修改
+- **Action**: 未来 inbox 任务必须强调 "work within your worktree, translate absolute paths to worktree-relative paths"。Leader 合并产出时先 diff 确认内容在 worktree 中
+- **Result**: 改善 — 本次手动恢复，后续可避免
