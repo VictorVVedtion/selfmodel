@@ -697,7 +697,7 @@ cmd_status() {
 
     # Active worktrees
     local worktrees
-    worktrees=$(git -C "$dir" worktree list 2>/dev/null | grep -v "bare" | grep -cv "$(cd "$dir" && pwd) " 2>/dev/null) || worktrees=0
+    worktrees=$(git -C "$dir" worktree list 2>/dev/null | grep -v "bare" | grep -v "$(cd "$dir" && pwd) " | wc -l | tr -d ' ') || worktrees=0
     echo "Worktrees: $worktrees active"
 
     # Recent quality scores (last 5)
@@ -717,7 +717,11 @@ cmd_status() {
     # Lessons count
     local lessons auto_learned
     lessons=$(grep -c "^### Sprint" "$selfmodel_dir/playbook/lessons-learned.md" 2>/dev/null || echo 0)
-    auto_learned=$(grep -c "^\[" "$selfmodel_dir/playbook/lessons-learned.md" 2>/dev/null || echo 0)
+    if [[ -f "$selfmodel_dir/state/hook-intercepts.log" ]]; then
+        auto_learned=$(wc -l < "$selfmodel_dir/state/hook-intercepts.log" | tr -d ' ')
+    else
+        auto_learned=0
+    fi
     echo "────────────────────────────────────────────────────"
     echo "Lessons: $lessons formal | $auto_learned auto-learned"
 

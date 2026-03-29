@@ -289,6 +289,7 @@ REVISE 或 REJECT 时写入 `.selfmodel/reviews/sprint-<N>-review.md`：
 |------|----------|------|
 | `quality.jsonl` | 保留全部 | 审计需要，Evolution 分析依赖完整历史 |
 | `orchestration.log` | 保留最近 500 行 | 诊断用途，超大文件影响读取速度 |
+| `hook-intercepts.log` | 保留最近 200 行 | Hook 拦截记录，Leader 每 10 sprint 审查后可清理 |
 | `evolution.jsonl` | 保留全部 | 进化记录不可丢失 |
 
 轮转命令（Leader 在 Sprint 50+ 后可选执行）：

@@ -18,12 +18,12 @@
 
 ## Auto-Learned
 
-Hook 拦截记录。每次 hook exit 2 自动追加（由 hook 脚本写入）。
-Leader 每 10 sprint 审查，提取有价值的经验升级为正式 Log 条目。
+Hook 拦截记录自动追加到 `.selfmodel/state/hook-intercepts.log`（不在此文件中，避免修改受保护的 playbook）。
+Leader 每 10 sprint 审查 hook-intercepts.log，提取有价值的经验升级为下方正式 Log 条目。
 
-### Format
+### Log 格式
 ```
-[<timestamp>] hook=<hook-name> command=<blocked-command-summary> reason=<why-blocked>
+[<timestamp>] hook=<hook-name> tool=<tool-name> reason=<why-blocked>
 ```
 
 ---

@@ -57,8 +57,8 @@ fi
 if [[ "${ACTIVE_CONTRACT_COUNT}" -eq 0 ]]; then
     # 自动记录拦截事件到 lessons-learned（Auto-Learned 部分）
     PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] hook=enforce-agent-rules command=$(echo "${COMMAND}" | head -c 100) reason=no-active-contract" \
-      >> "${PROJECT_ROOT}/.selfmodel/playbook/lessons-learned.md" 2>/dev/null || true
+    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] hook=enforce-agent-rules tool=$(printf '%s' "${COMMAND}" | awk '{print $1}') reason=no-active-contract" \
+      >> "${PROJECT_ROOT}/.selfmodel/state/hook-intercepts.log" 2>/dev/null || true
 
     {
         echo "🚨 [Hook 拦截] 违反「Sprint 合约制」规则"
@@ -93,8 +93,8 @@ if [[ "${HAS_GEMINI}" == "true" ]]; then
 
     if [[ "${GEMINI_INBOX_COUNT}" -eq 0 ]]; then
         PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-        echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] hook=enforce-agent-rules command=$(echo "${COMMAND}" | head -c 100) reason=no-gemini-inbox" \
-          >> "${PROJECT_ROOT}/.selfmodel/playbook/lessons-learned.md" 2>/dev/null || true
+        echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] hook=enforce-agent-rules tool=gemini reason=no-gemini-inbox" \
+          >> "${PROJECT_ROOT}/.selfmodel/state/hook-intercepts.log" 2>/dev/null || true
 
         {
             echo "🚨 [Hook 拦截] 违反「通信缓冲隔离」规则"
@@ -123,8 +123,8 @@ if [[ "${HAS_CODEX}" == "true" ]]; then
 
     if [[ "${CODEX_INBOX_COUNT}" -eq 0 ]]; then
         PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-        echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] hook=enforce-agent-rules command=$(echo "${COMMAND}" | head -c 100) reason=no-codex-inbox" \
-          >> "${PROJECT_ROOT}/.selfmodel/playbook/lessons-learned.md" 2>/dev/null || true
+        echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] hook=enforce-agent-rules tool=codex reason=no-codex-inbox" \
+          >> "${PROJECT_ROOT}/.selfmodel/state/hook-intercepts.log" 2>/dev/null || true
 
         {
             echo "🚨 [Hook 拦截] 违反「通信缓冲隔离」规则"

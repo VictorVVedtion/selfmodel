@@ -53,7 +53,7 @@
 - 禁止 TODO / mock / placeholder
 - **原子提交**: 每完成一个可独立验证的变更即 commit（而非最终交付一个大补丁）
 - **即时验证**: 每次 commit 后运行相关测试/类型检查，回归则 revert
-- **禁止操作**: rm -rf / git push / 修改 .selfmodel/ / 安装全局依赖 / 调用生产 API
+- **禁止操作**: 见 Task Preamble 第 6 条及 CLAUDE.md Agent Safety Guardrails
 - <本 Sprint 专属约束>
 
 ## Cost (Leader 填写，Sprint 完成后)
