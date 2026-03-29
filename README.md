@@ -80,7 +80,7 @@ Inspired by [Anthropic's Harness Design](https://www.anthropic.com/engineering/h
 - **Independent evaluation** — Evaluator runs in isolated context with skeptical prompt. Receives only: git diff + sprint contract + calibration. No access to Leader orchestration history.
 - **Orchestration loop** — For large projects (10+ sprints), automated loop reads plan file, dispatches agents, dispatches evaluator, acts on verdicts, checkpoints between sprints, resets between phases.
 - **File buffer communication** — Complex prompts written to `.selfmodel/inbox/` files, referenced via `@` syntax. No CLI argument escaping nightmares.
-- **Three-layer silent execution** — `yes | CI=true timeout 180 <cmd>`. Zero interactive prompts, zero hangs.
+- **Two-layer silent execution** — `CI=true GIT_TERMINAL_PROMPT=0 timeout 180 <cmd>`. Zero interactive prompts, zero hangs. Never use `yes |` (causes E2BIG with Gemini CLI sandbox).
 - **Small batches** — Each agent task completes in 30–60 seconds. No API timeout risks.
 - **Research before implementation** — Unknown domains must go through Researcher before any Generator is dispatched.
 - **Hooks enforcement** — Claude Code hooks convert CLAUDE.md soft rules into hard constraints (exit 2 = block).

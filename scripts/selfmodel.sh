@@ -1284,7 +1284,7 @@ generate_claude_md() {
 7. **No Implementation** — Leader only orchestrates, reviews, arbitrates
 8. **No Self-Review** — Implementer ≠ Reviewer
 9. **File Buffer** — Complex prompts written to .selfmodel/inbox/ files
-10. **No Interactive** — All commands: CI=true yes | timeout <N> <cmd>
+10. **No Interactive** — All commands: CI=true GIT_TERMINAL_PROMPT=0 timeout <N> <cmd>
 11. **Small Batch** — Each agent task completes in 30-60 seconds
 12. **Efficiency First** — Parallelize everything with no dependencies
 

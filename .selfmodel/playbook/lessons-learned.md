@@ -30,6 +30,12 @@
 - **Action**: 修正 enforce-agent-rules.sh gemini 检查逻辑
 - **Result**: 改善 — Researcher 调用不再被误拦截
 
+### Sprint 6: yes | 管道导致 Gemini CLI E2BIG
+- **Category**: tooling
+- **Lesson**: `yes |` 无限写入 stdin，Gemini CLI sandbox relaunch 时 stdin buffer 已积累数 MB 数据，execve() 调用超出 ARG_MAX (1MB macOS) 导致 `spawn E2BIG`。问题与文件大小和环境变量无关，纯粹是无限 stdin 流的副作用。Codex `--full-auto` 和 Gemini `--yolo` 已原生处理交互确认，`yes |` 完全不需要。
+- **Action**: 从所有 CLI 模板中移除 `yes |`，三层静默执行降为两层 (`CI=true GIT_TERMINAL_PROMPT=0 timeout <N>`)
+- **Result**: 改善 — Gemini CLI 在 POAI 项目 Sprint 57 重试后正常执行
+
 ### Sprint 5: Worktree 路径混淆
 - **Category**: communication
 - **Lesson**: inbox 任务文件给了 main 仓库的绝对路径作为 Context Files，Agent 直接编辑了 main 的文件而非 worktree 副本。Leader cp worktree→main 时覆盖了 Agent 的修改
