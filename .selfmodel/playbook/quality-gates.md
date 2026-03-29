@@ -122,6 +122,25 @@ Evaluator 返回 JSON verdict（schema 见 evaluator-prompt.md）。
 3. 检查 `auto_reject_triggered` 与 `auto_reject_reasons` 的一致性
 4. JSON 格式错误 → 从 Evaluator 文本输出提取关键信息，Leader 补全结构
 
+### Step 4.5: E2E Verdict 合并
+
+如果当前 Sprint 派发了 E2E Agent，在 Evaluator verdict 解析后执行合并：
+
+1. 解析 E2E JSON verdict
+2. 按以下规则合并 Evaluator 与 E2E 结果：
+
+| Evaluator | E2E | 最终 | 理由 |
+|-----------|-----|------|------|
+| ACCEPT | PASS | ACCEPT | 代码好且能跑 |
+| ACCEPT | FAIL | REVISE | 看着好但跑不起来，E2E failure 加入 must_fix |
+| ACCEPT | 未派发 | ACCEPT | 不需要 E2E，Evaluator 判定生效 |
+| REVISE | PASS | REVISE | 能跑但代码质量有问题 |
+| REVISE | FAIL | REVISE | 两方面都有问题，合并 must_fix |
+| REJECT | 任何 | REJECT | 代码质量太差，E2E 无关紧要 |
+| 任何 | FAIL(build) | REJECT | 编译失败覆盖 Evaluator |
+
+3. 如果 E2E FAIL 导致升级（ACCEPT → REVISE），将 `blocking_failures` 作为额外 `must_fix` 项写入 feedback
+
 ### Step 5: 判定（Leader 机械执行）
 
 加权平均: `weighted = func×0.30 + quality×0.25 + taste×0.20 + complete×0.15 + original×0.10`
@@ -278,7 +297,7 @@ REVISE 或 REJECT 时写入 `.selfmodel/reviews/sprint-<N>-review.md`：
 
 每次审查追加到 `.selfmodel/state/quality.jsonl`：
 ```json
-{"sprint":1,"agent":"gemini","evaluator":"opus-agent","scores":{"func":8,"quality":7,"taste":6,"complete":9,"original":7},"weighted":7.4,"verdict":"accept","leader_override":null,"ts":"2026-03-28T12:00:00Z"}
+{"sprint":1,"agent":"gemini","evaluator":"opus-agent","scores":{"func":8,"quality":7,"taste":6,"complete":9,"original":7},"weighted":7.4,"verdict":"accept","leader_override":null,"e2e_agent":"opus-agent","e2e_verdict":"PASS","e2e_scenarios":{"total":3,"passed":3,"failed":0},"final_verdict":"accept","ts":"2026-03-28T12:00:00Z"}
 ```
 
 ---

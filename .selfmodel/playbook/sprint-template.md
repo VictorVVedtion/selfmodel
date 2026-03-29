@@ -56,6 +56,19 @@
 - **禁止操作**: 见 Task Preamble 第 6 条及 CLAUDE.md Agent Safety Guardrails
 - <本 Sprint 专属约束>
 
+## E2E Scenarios（可选 — Leader 判断需要 E2E 时填写）
+
+### Build
+- Command: <build command>
+- Expected: exit 0
+
+### Runtime
+- Type: server | cli | test-suite | ui
+- Setup: <start commands>
+- Verify: <check commands>
+- Expected: <success condition>
+- Teardown: <cleanup commands>
+
 ## Cost (Leader 填写，Sprint 完成后)
 - Tokens: <estimated total, e.g. 125k input + 38k output>
 - Duration: <wall clock time, e.g. 4m 32s>
