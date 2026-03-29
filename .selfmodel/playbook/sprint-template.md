@@ -43,6 +43,12 @@
 - 禁止 TODO / mock / placeholder
 - <本 Sprint 专属约束>
 
+## Cost (Leader 填写，Sprint 完成后)
+- Tokens: <estimated total, e.g. 125k input + 38k output>
+- Duration: <wall clock time, e.g. 4m 32s>
+- Agent calls: <number of agent invocations, e.g. 2>
+- Researcher calls: <number of research queries, e.g. 1>
+
 ## Worktree
 - Branch: sprint/<N>-<agent>
 - Path: ../.zcf/selfmodel/sprint-<N>-<agent>/

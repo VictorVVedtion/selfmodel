@@ -155,8 +155,11 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 | Quality review + scoring | `.selfmodel/playbook/quality-gates.md` |
 | Sprint contract creation | `.selfmodel/playbook/sprint-template.md` |
 | Lessons learned + evolution | `.selfmodel/playbook/lessons-learned.md` |
+| Context checkpoint + reset protocol | `.selfmodel/playbook/context-protocol.md` |
 
 ## Context Management
+
+**Full protocol**: `playbook/context-protocol.md` — checkpoint triggers, handoff format, reset vs compaction decision tree
 
 ### Session Start Protocol
 
@@ -176,6 +179,13 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 3. Archive completed contracts → contracts/archive/
 4. Cleanup merged worktrees
 ```
+
+### Context Health Rules
+
+- Context usage > 70% → checkpoint immediately (write next-session.md), consider reset
+- Sprint completed → checkpoint (natural breakpoint)
+- Context Anxiety signals (repeated questions, hallucinated paths, fix loops) → force reset
+- Critical constraints MUST be externalized to playbook/ or code comments. NEVER rely on chat history alone.
 
 ## Evolution
 
