@@ -52,4 +52,4 @@ opus
 
 ## Lifecycle
 DRAFT → ACTIVE → DELIVERED → REVIEWED → MERGED | REJECTED
-当前状态: **ACTIVE**
+当前状态: **MERGED**

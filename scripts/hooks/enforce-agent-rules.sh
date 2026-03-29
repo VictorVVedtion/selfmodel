@@ -75,12 +75,16 @@ fi
 
 # ── Inbox 缓冲检查 ──
 if [[ "${HAS_GEMINI}" == "true" ]]; then
+    # Gemini CLI 有两种用途：Frontend (inbox/gemini/) 和 Researcher (inbox/research/)
+    # 任一 inbox 有 .md 文件即放行
     GEMINI_INBOX_COUNT=0
-    if [[ -d ".selfmodel/inbox/gemini" ]]; then
-        while IFS= read -r -d '' _; do
-            GEMINI_INBOX_COUNT=$((GEMINI_INBOX_COUNT + 1))
-        done < <(find .selfmodel/inbox/gemini -maxdepth 1 -name "*.md" -print0 2>/dev/null)
-    fi
+    for inbox_dir in ".selfmodel/inbox/gemini" ".selfmodel/inbox/research"; do
+        if [[ -d "${inbox_dir}" ]]; then
+            while IFS= read -r -d '' _; do
+                GEMINI_INBOX_COUNT=$((GEMINI_INBOX_COUNT + 1))
+            done < <(find "${inbox_dir}" -maxdepth 1 -name "*.md" -print0 2>/dev/null)
+        fi
+    done
 
     if [[ "${GEMINI_INBOX_COUNT}" -eq 0 ]]; then
         {
@@ -88,13 +92,11 @@ if [[ "${HAS_GEMINI}" == "true" ]]; then
             echo ""
             echo "被拦截命令: ${COMMAND}"
             echo ""
-            echo "调用 Gemini Agent 前必须将任务上下文写入 inbox 文件。"
+            echo "调用 Gemini CLI 前必须将任务上下文写入 inbox 文件。"
             echo ""
             echo "正确做法:"
-            echo "  1. 在 .selfmodel/inbox/gemini/ 下创建任务 Markdown 文件"
-            echo "  2. 写入详细的任务描述、上下文、约束条件"
-            echo "  3. CLI 命令中用 @ 引用文件路径"
-            echo "  4. 示例: gemini \"@.selfmodel/inbox/gemini/sprint-N.md 执行任务\" -s --yolo"
+            echo "  Frontend 任务: 在 .selfmodel/inbox/gemini/ 下创建任务文件"
+            echo "  Researcher 任务: 在 .selfmodel/inbox/research/ 下创建查询文件"
             echo ""
             echo "如需紧急绕过，使用: BYPASS_AGENT_RULES=1"
         } >&2
