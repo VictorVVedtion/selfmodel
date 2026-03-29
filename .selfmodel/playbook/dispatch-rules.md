@@ -101,31 +101,36 @@ CI=true timeout 120 gemini \
   2>&1 | tee /Users/vvedition/Desktop/selfmodel/.selfmodel/reviews/sprint-<N>-verdict.json
 ```
 
-### E2E Agent（运行时验证 — 只读）
+### E2E Agent v2（智能验证引擎 — 只读）
 
-1. Leader 将验证场景写入：`.selfmodel/inbox/e2e/sprint-<N>.md`
+1. Leader 写入最小化 dispatch 文件：`.selfmodel/inbox/e2e/sprint-<N>.md`（仅 worktree 路径 + 合约路径 + depth hint）
 2. **与 Evaluator 并行派发**（步骤 6 中同时触发）
+3. Agent 自主：读合约 → 读 diff → 探测环境 → 生成场景 → 执行 8 层验证金字塔 → 报告
 
 **Opus Agent 通道（主通道 — claude-opus-4-6）**:
 
 ```
 Agent tool:
   prompt: |
-    You are the E2E verification agent. You verify that delivered code works at runtime.
-    You do NOT modify any code. You only run commands and report results.
-    Read the verification file and execute each scenario.
-    Output ONLY valid JSON matching the schema in the file.
+    You are the E2E Verification Agent v2 (Opus 4.6).
+    Your mission: VERIFY that delivered code works at runtime. You do NOT modify code.
+    YOUR KEY ADVANTAGE: You can READ the diff, UNDERSTAND intent from acceptance
+    criteria, and VERIFY behavior dynamically. No pre-written test scripts needed.
+    Workflow: UNDERSTAND → PROBE → PLAN → SETUP → EXECUTE → RETRY → TEARDOWN → REPORT
+    Constraints: no code modification, no global installs, no prod APIs, no git push.
+    Save artifacts to: .selfmodel/artifacts/sprint-<N>/
     Verification file: /Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/e2e/sprint-<N>.md
+    Output ONLY valid JSON matching E2E Verdict v2 schema.
   isolation: "worktree"
   model: opus
 ```
 
-**Gemini CLI 通道（降级，仅 build 验证）**:
+**Gemini CLI 通道（降级，仅 Layer 0-1）**:
 
 ```bash
 cd <worktree-path> && \
 CI=true GIT_TERMINAL_PROMPT=0 timeout 120 gemini \
-  "@/Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/e2e/sprint-<N>.md Execute verification scenarios" \
+  "@/Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/e2e/sprint-<N>.md Execute only Layer 0 and Layer 1. Output JSON." \
   -s --yolo
 ```
 

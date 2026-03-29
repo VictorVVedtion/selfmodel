@@ -97,7 +97,7 @@ Inspired by [Anthropic's Harness Design](https://www.anthropic.com/engineering/h
 - **Leader decision principles** — 6 principles (Completeness, Blast Radius, Ship > Perfect, DRY, Explicit > Clever, Bias-toward-action) enable Leader to auto-decide intermediate questions without human escalation.
 - **AI Slop detection** — Evaluator penalizes 8 patterns of AI-generated low-quality code (excessive comments, unnecessary abstractions, template error handling, etc.).
 - **Adaptive initialization** — `selfmodel init/adapt` auto-detects tech stack and recommends optimal team composition.
-- **E2E parallel verification** — E2E Agent runs in parallel with Evaluator. Evaluator checks code quality (static), E2E checks runtime behavior (dynamic). Verdicts merge: E2E FAIL upgrades ACCEPT to REVISE; build failure overrides to REJECT.
+- **E2E intelligent verification (v2)** — E2E Agent v2 is an AI-native verification engine. It reads the diff, understands acceptance criteria, auto-generates verification scenarios across an 8-layer pyramid (smoke → build → tests → integration → browser → visual → performance → security). Lower layer failure blocks upper layers. Supports flaky detection, historical delta comparison, and artifact management.
 - **CLAUDE.md in English** — System instructions in English for higher LLM compliance (~3-4%); user interaction in Chinese via `<interaction_protocol>` tag.
 - **Self-evolution** — Every 10 sprints: MEASURE → DIAGNOSE → PROPOSE → EXPERIMENT → EVALUATE → SELECT. Hook interception logs feed into evolution analysis.
 
@@ -142,7 +142,8 @@ selfmodel/
         ├── research-protocol.md       # Researcher types A/B/C + evaluation
         ├── sprint-template.md         # Contract template (with Task Preamble)
         ├── evaluator-prompt.md        # Independent evaluator protocol
-        ├── e2e-protocol.md            # E2E runtime verification protocol
+        ├── e2e-protocol-v2.md         # E2E intelligent verification protocol (v2)
+        ├── e2e-protocol.md            # E2E v1 protocol (deprecated)
         ├── orchestration-loop.md      # Automated orchestration loop
         ├── context-protocol.md        # Context checkpoint + reset rules
         └── lessons-learned.md         # Accumulated wisdom
@@ -157,8 +158,8 @@ selfmodel/
 4. Create worktree          → git worktree add sprint-N-<agent>
 5. Agent executes           → isolated, non-interactive, timeout-protected
 6. Leader quick scan        → 10 auto-reject triggers on git diff
-7. Parallel review          → Evaluator (code quality) + E2E Agent (runtime, conditional)
-8. Leader merges verdicts   → E2E FAIL upgrades ACCEPT→REVISE; build FAIL→REJECT
+7. Parallel review          → Evaluator (code quality) + E2E Agent v2 (8-layer pyramid, auto-scenarios)
+8. Leader merges verdicts   → E2E FAIL upgrades ACCEPT→REVISE; build FAIL→REJECT; blocker regression→REVISE
 9. Leader acts on verdict   → ≥7.0 merge | 5.0-6.9 revise | <5.0 reject & redo
 ```
 

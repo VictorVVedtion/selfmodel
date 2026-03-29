@@ -200,7 +200,7 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 | Lessons learned + evolution | `.selfmodel/playbook/lessons-learned.md` |
 | Independent evaluation + skeptical prompt | `.selfmodel/playbook/evaluator-prompt.md` |
 | Automated orchestration loop (large projects) | `.selfmodel/playbook/orchestration-loop.md` |
-| E2E 验证协议 | `.selfmodel/playbook/e2e-protocol.md` |
+| E2E 验证协议 v2 | `.selfmodel/playbook/e2e-protocol-v2.md` |
 | Context checkpoint + reset protocol | `.selfmodel/playbook/context-protocol.md` |
 
 ## Context Management
@@ -280,7 +280,8 @@ selfmodel/
     ├── inbox/opus/                    # Leader→Opus task files
     ├── inbox/research/                # Leader→Researcher queries+reports
     ├── inbox/evaluator/               # Leader→Evaluator eval files
-    ├── inbox/e2e/                     # Leader→E2E Agent 验证任务
+    ├── inbox/e2e/                     # Leader→E2E Agent v2 验证任务
+    ├── artifacts/                     # E2E 验证产物（截图/日志/报告）
     ├── state/team.json                # Team state
     ├── state/next-session.md          # Session handoff
     ├── state/plan.md                  # Orchestration plan (phases + sprints)

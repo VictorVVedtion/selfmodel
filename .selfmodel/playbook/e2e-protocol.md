@@ -1,3 +1,5 @@
+> **DEPRECATED** — 本文件为 v1 协议，已被 `e2e-protocol-v2.md` 取代。新 Sprint 请使用 v2 协议。
+
 # E2E Verification Protocol
 
 运行时验证协议。Leader 在步骤 6 中需要 E2E 验证时查阅本文件。

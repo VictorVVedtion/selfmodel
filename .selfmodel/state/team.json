@@ -65,7 +65,18 @@
         "engine": "opus-agent",
         "timeout": 300,
         "requires_worktree": true,
-        "fallback_engine": "gemini-cli"
+        "fallback_engine": "gemini-cli",
+        "protocol_version": "2.0"
+      },
+      "flaky_registry": [],
+      "baseline_metrics": {
+        "build_time_seconds": null,
+        "test_count": null,
+        "bundle_size_kb": null,
+        "coverage_percent": null,
+        "lighthouse_score": null,
+        "npm_audit_critical": null,
+        "recorded_at_sprint": null
       }
     }
   },
