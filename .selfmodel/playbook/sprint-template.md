@@ -57,7 +57,7 @@
 - <本 Sprint 专属约束>
 
 ## E2E Depth（可选 — Leader 判断需要 E2E 时填写）
-- Depth: auto | quick | standard | deep
+- Depth: quick | standard | deep | auto
 - Notes: <可选，额外验证重点>
 （v2 协议：Agent 自主分析 diff + 验收标准生成验证策略，Leader 无需手写场景）
 

@@ -110,7 +110,7 @@ LOOP:
         - Evaluator ACCEPT + E2E PASS + Blocker regression → final REVISE
         - Evaluator REVISE + E2E PASS/undispatched → final REVISE
         - Evaluator REVISE + E2E FAIL → final REVISE (merge both must_fix + E2E blocking_failures, see quality-gates.md Step 4.5)
-        - FLAKY scenarios do not affect verdict (recorded in flaky_report)
+        - FLAKY atoms do not affect verdict (recorded in flaky_report)
 
   7. ACT on each verdict
      - ACCEPT → merge, archive contract, cleanup worktree

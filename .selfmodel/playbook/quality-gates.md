@@ -139,7 +139,7 @@ Evaluator 返回 JSON verdict（schema 见 evaluator-prompt.md）。
 | REJECT | 任何 | - | REJECT | 代码质量太差 |
 | 任何 | FAIL(build) | - | REJECT | 编译失败覆盖 Evaluator |
 
-3. FLAKY 场景不影响 verdict（不视为 FAIL），但记录到 flaky_report
+3. FLAKY 原子验证不影响 verdict（不视为 FAIL），但记录到 flaky_report
 4. 如果 E2E FAIL 导致升级（ACCEPT → REVISE），将 `blocking_failures` 作为额外 `must_fix` 项写入 feedback
 5. 详细协议见 `e2e-protocol-v2.md`
 
