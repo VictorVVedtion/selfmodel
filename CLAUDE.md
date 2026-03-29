@@ -77,9 +77,10 @@ Agent 在 worktree 中执行时，inbox task 必须包含以下禁止操作清�
 | **Researcher** | Gemini CLI | gemini-3.1-pro-preview | `timeout 300 gemini -p "$(cat <file>)" -m gemini-3.1-pro-preview -y` |
 | **E2E Verifier** | Opus Agent / Gemini CLI | claude-opus-4-6 / gemini-3.1-pro-preview | Agent tool (read-only) or `gemini "@<file>" -s --yolo` |
 
-**Harness mapping**: Leader = Planner + Orchestrator | Evaluator = Independent Quality Gate | Gemini/Codex/Opus = Generator | Researcher = Intelligence
+**Harness mapping**: Leader = Planner + Orchestrator | Evaluator = Independent Quality Gate | Gemini/Codex/Opus = Generator | Researcher = Intelligence | E2E Verifier = Runtime Validator
 **Core constraint**: Generators NEVER self-review. Leader NEVER implements. Leader NEVER evaluates (delegates to Evaluator). Evaluator receives ONLY diff + contract + calibration.
 **Researcher constraint**: Read-only. No code output. No worktree needed. Produces research reports for Leader decisions.
+**E2E constraint**: Read-only. NEVER modifies code. Parses acceptance criteria into atomic verifications, executes each, reports evidence. Runs in parallel with Evaluator.
 
 ## Execution Protocol
 
@@ -87,7 +88,7 @@ Agent 在 worktree 中执行时，inbox task 必须包含以下禁止操作清�
 
 For projects with 10+ Sprints, use the automated orchestration loop:
 1. Leader creates `.selfmodel/state/plan.md` (phases, sprints, dependencies)
-2. Loop: read plan → find executable sprints → write contracts → dispatch Agents → dispatch Evaluator → act on verdict → checkpoint → loop
+2. Loop: read plan → find executable sprints → write contracts → dispatch Agents → dispatch Evaluator + E2E (parallel) → merge verdicts → act → checkpoint → loop
 3. Phase boundary → force context reset (`/clear`), re-read CLAUDE.md + plan.md
 
 Full protocol: `playbook/orchestration-loop.md`. Manual mode still works for small projects.
@@ -188,6 +189,7 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 
 **Verdict**: ≥7.0 Accept → merge | 5.0-6.9 Revise → feedback | <5.0 Reject → redo
 **Independent Evaluator**: All output reviewed by isolated Evaluator (Opus Agent or Gemini CLI, skeptical prompt). Details in `playbook/evaluator-prompt.md`. Leader acts on verdict mechanically.
+**E2E Verification (parallel with Evaluator)**: When Sprint has runnable deliverables or acceptance criteria contain runtime verbs (runs/renders/responds/starts/passes tests), dispatch E2E Agent in parallel with Evaluator. E2E parses each AC into atomic verifications, executes, and reports per-AC evidence. E2E FAIL upgrades ACCEPT→REVISE; build FAIL→REJECT. Load `playbook/e2e-protocol-v2.md` for full protocol.
 
 ## On-Demand Loading
 
