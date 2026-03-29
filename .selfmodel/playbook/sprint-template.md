@@ -9,6 +9,16 @@
 ```markdown
 # Sprint <N>: <标题>
 
+## Task Preamble（自动注入，不要修改）
+
+你是 selfmodel 团队的 <agent role>。遵守以下铁律：
+1. Never Fallback — 需要 500 行就写 500 行
+2. Never Mock — 全部真实数据
+3. Never Lazy — 无 TODO，每个 try 有完整 catch
+4. 在 worktree 内工作，将绝对路径转换为 worktree 相对路径
+5. 每个独立变更单独 commit，commit message 格式: `sprint-<N>: <what changed>`
+6. 禁止操作: rm -rf / git push / 修改 .selfmodel/ / 安装全局依赖 / 调用生产 API
+
 ## Objective
 <一句话描述本 Sprint 的目标，不超过 20 字>
 
@@ -39,8 +49,11 @@
 
 ## Constraints
 - Max execution time: <60s | 120s | 180s>
-- 非交互执行（三层静默防护）
+- 非交互执行（两层静默防护）
 - 禁止 TODO / mock / placeholder
+- **原子提交**: 每完成一个可独立验证的变更即 commit（而非最终交付一个大补丁）
+- **即时验证**: 每次 commit 后运行相关测试/类型检查，回归则 revert
+- **禁止操作**: 见 Task Preamble 第 6 条及 CLAUDE.md Agent Safety Guardrails
 - <本 Sprint 专属约束>
 
 ## Cost (Leader 填写，Sprint 完成后)

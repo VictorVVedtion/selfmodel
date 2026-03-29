@@ -16,6 +16,18 @@
 
 ---
 
+## Auto-Learned
+
+Hook 拦截记录自动追加到 `.selfmodel/state/hook-intercepts.log`（不在此文件中，避免修改受保护的 playbook）。
+Leader 每 10 sprint 审查 hook-intercepts.log，提取有价值的经验升级为下方正式 Log 条目。
+
+### Log 格式
+```
+[<timestamp>] hook=<hook-name> tool=<tool-name> reason=<why-blocked>
+```
+
+---
+
 ## Log
 
 ### Sprint 1: Gemini CLI -G flag 不存在

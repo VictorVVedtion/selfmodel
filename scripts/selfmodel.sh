@@ -665,6 +665,85 @@ cmd_version() {
     echo "selfmodel $SELFMODEL_VERSION"
 }
 
+# ─── CMD: status ──────────────────────────────────────────────────────────────
+cmd_status() {
+    local dir="${1:-.}"
+    local selfmodel_dir="$dir/.selfmodel"
+
+    if [[ ! -d "$selfmodel_dir" ]]; then
+        err "No .selfmodel/ directory found. Run 'selfmodel init' first."
+        exit 1
+    fi
+
+    echo "═══════════════════════════════════════════════════"
+    echo " selfmodel status — v$SELFMODEL_VERSION"
+    echo "═══════════════════════════════════════════════════"
+
+    # Team state
+    if [[ -f "$selfmodel_dir/state/team.json" ]]; then
+        local sprint version
+        sprint=$(jq -r '.current_sprint // 0' "$selfmodel_dir/state/team.json" 2>/dev/null)
+        version=$(jq -r '.evolution.protocol_version // "unknown"' "$selfmodel_dir/state/team.json" 2>/dev/null)
+        echo "Protocol: v$version | Sprint: $sprint"
+    else
+        warn "team.json not found"
+    fi
+
+    # Active contracts
+    local active archived
+    active=$(find "$selfmodel_dir/contracts/active" -maxdepth 1 -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
+    archived=$(find "$selfmodel_dir/contracts/archive" -maxdepth 1 -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
+    echo "Contracts: $active active | $archived archived"
+
+    # Active worktrees
+    local worktrees
+    worktrees=$(git -C "$dir" worktree list 2>/dev/null | grep -v "bare" | grep -v "$(cd "$dir" && pwd) " | wc -l | tr -d ' ') || worktrees=0
+    echo "Worktrees: $worktrees active"
+
+    # Recent quality scores (last 5)
+    if [[ -f "$selfmodel_dir/state/quality.jsonl" ]] && [[ -s "$selfmodel_dir/state/quality.jsonl" ]]; then
+        echo "────────────────────────────────────────────────────"
+        echo "Recent Scores (last 5):"
+        tail -5 "$selfmodel_dir/state/quality.jsonl" | while IFS= read -r line; do
+            local s a w v
+            s=$(echo "$line" | jq -r '.sprint // "?"' 2>/dev/null)
+            a=$(echo "$line" | jq -r '.agent // "?"' 2>/dev/null)
+            w=$(echo "$line" | jq -r '.weighted // 0' 2>/dev/null)
+            v=$(echo "$line" | jq -r '.verdict // "?"' 2>/dev/null)
+            printf "  Sprint %-3s %-8s %s %s\n" "$s" "$a" "$w" "$v"
+        done
+    fi
+
+    # Lessons count
+    local lessons auto_learned
+    lessons=$(grep -c "^### Sprint" "$selfmodel_dir/playbook/lessons-learned.md" 2>/dev/null || echo 0)
+    if [[ -f "$selfmodel_dir/state/hook-intercepts.log" ]]; then
+        auto_learned=$(wc -l < "$selfmodel_dir/state/hook-intercepts.log" | tr -d ' ')
+    else
+        auto_learned=0
+    fi
+    echo "────────────────────────────────────────────────────"
+    echo "Lessons: $lessons formal | $auto_learned auto-learned"
+
+    # Playbook consistency
+    echo "────────────────────────────────────────────────────"
+    local playbook_files=("dispatch-rules.md" "quality-gates.md" "sprint-template.md" \
+        "evaluator-prompt.md" "orchestration-loop.md" "research-protocol.md" \
+        "context-protocol.md" "lessons-learned.md")
+    local missing=0
+    for f in "${playbook_files[@]}"; do
+        if [[ ! -f "$selfmodel_dir/playbook/$f" ]]; then
+            missing=$((missing + 1))
+            warn "  MISSING: $f"
+        fi
+    done
+    if [[ $missing -eq 0 ]]; then
+        ok "Playbook: all ${#playbook_files[@]} files present"
+    fi
+
+    echo "═══════════════════════════════════════════════════"
+}
+
 # ─── Generate Playbook ────────────────────────────────────────────────────────
 generate_playbook() {
     local dir="${1:-.}"
@@ -1398,6 +1477,7 @@ main() {
         init)    check_deps; cmd_init "$@" ;;
         adapt)   check_deps; cmd_adapt "$@" ;;
         update)  check_deps; cmd_update "$@" ;;
+        status)  check_deps; cmd_status "$@" ;;
         version) cmd_version ;;
         -v)      cmd_version ;;
         --version) cmd_version ;;
@@ -1412,6 +1492,7 @@ main() {
             echo "  update   Update playbook files to latest version"
             echo "             --remote    Fetch latest from GitHub (instead of local templates)"
             echo "             --version   Specify version/tag (default: main)"
+            echo "  status   Show team health dashboard"
             echo "  version  Show version"
             echo ""
             echo "Examples:"

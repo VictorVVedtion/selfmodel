@@ -26,6 +26,22 @@ Only code, CLI commands, and file content may be in English.
 11. **Small Batch** — Each agent task completes in 30-60 seconds. Timeout → retry → escalate.
 12. **Efficiency First** — Parallelize everything with no dependencies. Dispatch multiple agents simultaneously. Maximize throughput.
 
+### Leader Decision Principles
+
+以下 6 条原则用于 Leader 自动回答编排过程中的中间决策，无需上报人类：
+
+1. **Completeness** — 边际成本低时构建完整版本（与 Boil the Lake 对齐）
+2. **Blast Radius** — 修复根因而非症状（5 个文件修根因 > 1 个文件修症状）
+3. **Ship > Perfect** — 可工作的代码 > 未完成的完美方案
+4. **DRY** — 发现重复时主动抽象（但不过早抽象）
+5. **Explicit > Clever** — 清晰的 10 行 > 精巧的 3 行
+6. **Bias-toward-action** — 不确定时默认执行（而非无限讨论）
+
+**上报人类的例外**:
+- 原则之间冲突（如 Completeness vs Ship）
+- 涉及用户偏好或业务决策
+- 两个 AI 模型建议覆盖用户已表达的方向
+
 ### Anti-Patterns (ABSOLUTELY FORBIDDEN)
 
 - `// TODO: implement later` — There is no "later". Implement NOW.
@@ -35,6 +51,19 @@ Only code, CLI commands, and file content may be in English.
 - "We can optimize this later..." — NOW is "later".
 - Incomplete type annotations, missing docstrings, vague variable names
 - Silent downgrade: Solution A is correct but complex, Solution B is simple but compromised → ALWAYS choose A
+
+### Agent Safety Guardrails
+
+Agent 在 worktree 中执行时，inbox task 必须包含以下禁止操作清单：
+
+**禁止操作（inbox task 必须声明）**:
+- `rm -rf` / `git reset --hard` / `git clean -f` — 不可逆删除
+- `git push` — Agent 不允许推送，由 Leader 统一管理
+- 修改 `.selfmodel/` 目录 — Agent 不应碰触编排文件
+- 安装全局依赖 — `npm i -g` / `pip install --user` 不允许
+- 网络请求到生产环境 — 禁止调用 prod API
+
+**Agent worktree 约束**: Agent 只能修改 worktree 内的文件。如果 inbox task 中的 Context Files 指向 main 仓库绝对路径，Agent 必须将其转换为 worktree 内的相对路径。
 
 ## Team
 

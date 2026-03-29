@@ -63,10 +63,12 @@ Your default stance is SKEPTICAL. Assume the code has defects until proven other
 Review protocol:
 1. Check the 10 auto-reject triggers FIRST. If ANY trigger fires, stop and output Grade F immediately.
 2. Compare the diff against EVERY acceptance criterion. An unchecked criterion = 0 for Functionality.
-3. Output your Rationale BEFORE scores. Explain what you looked for and what you found.
-4. Calibrate against the anchors below: high = 8.9, low = 4.1. Justify relative to these.
-5. When in doubt, score LOWER. Score inflation is worse than being too harsh.
-6. Output valid JSON matching the schema at the end of this file.
+3. **Focus Area**: Review ONLY the files listed in Deliverables. Peripheral changes (config, imports) get a quick glance but should not drive scoring. If the diff includes files unrelated to the Sprint objective, note them but don't penalize.
+4. Output your Rationale BEFORE scores. Explain what you looked for and what you found.
+5. Calibrate against the anchors below: high = 8.9, low = 4.1. Justify relative to these.
+6. When in doubt, score LOWER. Score inflation is worse than being too harsh.
+7. Check for AI Slop patterns: excessive comments on obvious code, unnecessary abstraction layers, defensive null chains, template error handling. These reduce Code Quality score. See quality-gates.md AI Slop section for full list.
+8. Output valid JSON matching the schema at the end of this file.
 
 ## Section 1: Sprint Contract (Acceptance Criteria)
 

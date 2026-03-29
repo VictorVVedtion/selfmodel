@@ -63,6 +63,26 @@
 
 ---
 
+## AI Slop 检测
+
+以下模式是 AI 生成代码的典型低质量特征。Evaluator 应在 Code Quality 维度扣分：
+
+1. **过度注释** — 每行代码配一行注释解释显而易见的逻辑
+2. **样板化结构** — 不必要的 abstract class / interface / factory pattern
+3. **防御性废话** — `if (value !== null && value !== undefined && value !== "")` 链
+4. **同义词堆砌** — `getData` / `fetchData` / `retrieveData` 做同一件事
+5. **无意义抽象层** — 只有一个实现的 interface，只调用一次的 helper
+6. **解释型命名** — `thisIsTheUserNameFromTheDatabase` 过于冗长
+7. **模板化错误处理** — 所有 catch 块用同一段 `console.error(err); throw err`
+8. **AI 客气话** — 代码注释中出现 "This function elegantly handles..." 等自我评价
+
+扣分标准：
+- 1-2 处 → Code Quality -0.5
+- 3-4 处 → Code Quality -1.0
+- 5+ 处 → 视为系统性问题，Code Quality 直接 ≤6
+
+---
+
 ## Review Protocol
 
 ### Step 1: Quick Scan（30 秒，Leader 执行）
@@ -74,7 +94,10 @@
 
 构建 eval 输入文件 `.selfmodel/inbox/evaluator/sprint-<N>-eval.md`：
 1. 复制合约中的验收标准和 Scoring Rubric
-2. 附加完整 git diff 输出（遵循 evaluator-prompt.md 中的 Diff Size Limits）
+2. **聚焦区域 diff**（非全量 diff）:
+   - 只附加与 Deliverables 直接相关的文件 diff：`git diff main...sprint/<N>-<agent> -- <file1> <file2>`
+   - 对于超出 Deliverables 范围的文件变更，附加 `--stat` 摘要即可
+   - 大 diff 仍遵循 evaluator-prompt.md 中的 Diff Size Limits
 3. 附加校准锚点（满分 8.9 和不及格 4.1 的评分表，来自本文件 Calibration Examples）
 4. 写入文件
 
@@ -256,4 +279,21 @@ REVISE 或 REJECT 时写入 `.selfmodel/reviews/sprint-<N>-review.md`：
 每次审查追加到 `.selfmodel/state/quality.jsonl`：
 ```json
 {"sprint":1,"agent":"gemini","evaluator":"opus-agent","scores":{"func":8,"quality":7,"taste":6,"complete":9,"original":7},"weighted":7.4,"verdict":"accept","leader_override":null,"ts":"2026-03-28T12:00:00Z"}
+```
+
+---
+
+## 日志维护
+
+| 文件 | 轮转策略 | 理由 |
+|------|----------|------|
+| `quality.jsonl` | 保留全部 | 审计需要，Evolution 分析依赖完整历史 |
+| `orchestration.log` | 保留最近 500 行 | 诊断用途，超大文件影响读取速度 |
+| `hook-intercepts.log` | 保留最近 200 行 | Hook 拦截记录，Leader 每 10 sprint 审查后可清理 |
+| `evolution.jsonl` | 保留全部 | 进化记录不可丢失 |
+
+轮转命令（Leader 在 Sprint 50+ 后可选执行）：
+```bash
+tail -500 .selfmodel/state/orchestration.log > .selfmodel/state/orchestration.log.tmp \
+  && mv .selfmodel/state/orchestration.log.tmp .selfmodel/state/orchestration.log
 ```
