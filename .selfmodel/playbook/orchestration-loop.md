@@ -105,7 +105,8 @@ LOOP:
         - E2E FAIL(build) → final REJECT (overrides Evaluator)
         - Evaluator ACCEPT + E2E FAIL → final REVISE
         - Evaluator ACCEPT + E2E PASS/undispatched → final ACCEPT
-        - Evaluator REVISE → final REVISE (merge must_fix lists)
+        - Evaluator REVISE + E2E PASS/undispatched → final REVISE
+        - Evaluator REVISE + E2E FAIL → final REVISE (merge both must_fix + E2E blocking_failures)
 
   7. ACT on each verdict
      - ACCEPT → merge, archive contract, cleanup worktree

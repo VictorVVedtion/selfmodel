@@ -30,7 +30,7 @@
 ### 跳过 E2E（所有条件成立）
 
 1. 纯文档修改（仅 `.md` 文件）
-2. 纯类型定义/接口/无运行时影响的配置
+2. 纯类型定义/接口/无运行时影响的配置（测试文件修改被触发条件 3 覆盖，不视为纯配置）
 3. 研究型 Sprint（Researcher 角色）
 4. Leader 显式标注 `E2E: skip`
 
@@ -56,7 +56,7 @@ Agent tool:
 
 ```bash
 cd <worktree-path> && \
-CI=true GIT_TERMINAL_PROMPT=0 timeout 180 gemini \
+CI=true GIT_TERMINAL_PROMPT=0 timeout 120 gemini \
   "@/Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/e2e/sprint-<N>.md Execute verification scenarios" \
   -s --yolo
 ```
@@ -138,7 +138,7 @@ Output ONLY valid JSON:
     "skipped": 0,
     "timed_out": 0
   },
-  "verdict": "PASS | FAIL | PARTIAL",
+  "verdict": "PASS | FAIL",
   "blocking_failures": [
     {
       "scenario": "<name>",

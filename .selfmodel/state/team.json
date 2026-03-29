@@ -54,19 +54,19 @@
         "requires_worktree": false,
         "skeptical_prompt": true
       }
-    }
-  },
-  "e2e": {
-    "status": "idle",
-    "role": "e2e_verifier",
-    "verifications_completed": 0,
-    "pass_rate": 0,
-    "last_sprint": null,
-    "config": {
-      "engine": "opus-agent",
-      "timeout": 300,
-      "requires_worktree": false,
-      "fallback_engine": "gemini-cli"
+    },
+    "e2e": {
+      "status": "idle",
+      "role": "e2e_verifier",
+      "verifications_completed": 0,
+      "pass_rate": 0,
+      "last_sprint": null,
+      "config": {
+        "engine": "opus-agent",
+        "timeout": 300,
+        "requires_worktree": true,
+        "fallback_engine": "gemini-cli"
+      }
     }
   },
   "evolution": {

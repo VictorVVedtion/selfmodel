@@ -56,8 +56,8 @@ Inspired by [Anthropic's Harness Design](https://www.anthropic.com/engineering/h
             │                           │
     ┌───────▼───────┐           ┌───────▼───────┐
     │  git diff →   │           │  E2E Agent    │
-    │  Independent  │           │  (Opus 4.6)   │
-    │  Evaluator    │◄─ skepti  │  Runtime      │
+    │  Independent  │           │ (Opus/Gemini) │
+    │  Evaluator    │  skepti   │  Runtime      │
     │  (isolated)   │  cal      │  verification │
     └───────┬───────┘           └───────┬───────┘
             │                           │

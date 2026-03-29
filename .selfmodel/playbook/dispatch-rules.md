@@ -124,7 +124,7 @@ Agent tool:
 
 ```bash
 cd <worktree-path> && \
-CI=true GIT_TERMINAL_PROMPT=0 timeout 180 gemini \
+CI=true GIT_TERMINAL_PROMPT=0 timeout 120 gemini \
   "@/Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/e2e/sprint-<N>.md Execute verification scenarios" \
   -s --yolo
 ```
