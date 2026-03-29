@@ -1,13 +1,13 @@
 # Next Session Handoff
 
 ## 状态
-Researcher 角色上线 + selfmodel CLI 工具完成。可对任意项目运行 `selfmodel init/adapt/update`。
+Hooks 强制执行系统上线。Claude Code 现在会硬约束工作流规则（Leader 不下场、合约前置、Inbox 缓冲）。Sprint 2 按完整协议（合约→inbox→Agent worktree→审查）完成。
 
 ## 下一步
 1. **决定产品方向** — selfmodel 要构建什么具体产品？
-2. **创建 Sprint 1 合约** — 选择一个小任务，填写 sprint-template.md
-3. **验证端到端通路** — 创建 worktree → 写 inbox 任务 → 调用 agent → 审查 diff → merge
-4. **GitHub Template** — 在 GitHub Settings 中标记为 Template Repository
+2. **GitHub Template** — 在 GitHub Settings 中标记为 Template Repository
+3. **验证 Hooks** — 新 session 启动时确认 session-start.sh 注入上下文
+4. **selfmodel init 集成** — selfmodel.sh init 时自动生成 hooks 配置
 
 ## Blockers
 无
@@ -26,6 +26,8 @@ Researcher 角色上线 + selfmodel CLI 工具完成。可对任意项目运行 
 - **研究前置** — 未知领域先研究再实现，研究报告输入 Leader 决策
 - **selfmodel CLI** — `scripts/selfmodel.sh` 实现 init/adapt/update，Nx 风格特征文件推断
 - **Gemini CLI 修正** — `-G` flag 不存在，正确用法是 `-p "..." -m gemini-3.1-pro-preview -y`
+- **Hooks 强制执行** — 3 个 hook 脚本 + settings.json，将 CLAUDE.md 软规则变硬约束
+- **Sprint 2 完整协议执行** — 首次按合约→inbox→Agent worktree→审查流程完成
 
 ## Active Worktrees
 无
