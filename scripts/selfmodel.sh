@@ -152,6 +152,7 @@ recommend_team() {
     local agents='"leader": {"status": "idle", "role": "leader_orchestrator"}'
     agents+=', "researcher": {"status": "idle", "role": "researcher", "config": {"engine": "gemini-cli", "model": "gemini-3.1-pro-preview", "timeout": 300, "requires_worktree": false}}'
     agents+=', "evaluator": {"status": "idle", "role": "independent_evaluator", "evaluations_completed": 0, "avg_score_given": 0, "channel": "opus-agent", "fallback_channel": "gemini", "config": {"timeout": 120, "requires_worktree": false, "skeptical_prompt": true}}'
+    agents+=', "e2e": {"status": "idle", "role": "e2e_verifier", "verifications_completed": 0, "pass_rate": 0, "last_sprint": null, "config": {"engine": "opus-agent", "timeout": 300, "requires_worktree": true, "fallback_engine": "gemini-cli", "protocol_version": "2.0"}}'
 
     case "$type" in
         fullstack)
@@ -185,12 +186,13 @@ create_structure() {
     mkdir -p "$dir/.selfmodel/inbox/opus"
     mkdir -p "$dir/.selfmodel/inbox/research"
     mkdir -p "$dir/.selfmodel/inbox/evaluator"
+    mkdir -p "$dir/.selfmodel/inbox/e2e"
     mkdir -p "$dir/.selfmodel/reviews"
     mkdir -p "$dir/.selfmodel/state"
     mkdir -p "$dir/.selfmodel/playbook"
 
     # .gitkeep for empty directories
-    for d in contracts/active contracts/archive inbox/gemini inbox/codex inbox/opus inbox/research inbox/evaluator reviews; do
+    for d in contracts/active contracts/archive inbox/gemini inbox/codex inbox/opus inbox/research inbox/evaluator inbox/e2e reviews; do
         touch "$dir/.selfmodel/$d/.gitkeep"
     done
 }
@@ -728,8 +730,8 @@ cmd_status() {
     # Playbook consistency
     echo "────────────────────────────────────────────────────"
     local playbook_files=("dispatch-rules.md" "quality-gates.md" "sprint-template.md" \
-        "evaluator-prompt.md" "orchestration-loop.md" "research-protocol.md" \
-        "context-protocol.md" "lessons-learned.md")
+        "evaluator-prompt.md" "e2e-protocol.md" "e2e-protocol-v2.md" "orchestration-loop.md" \
+        "research-protocol.md" "context-protocol.md" "lessons-learned.md")
     local missing=0
     for f in "${playbook_files[@]}"; do
         if [[ ! -f "$selfmodel_dir/playbook/$f" ]]; then

@@ -56,6 +56,11 @@
 - **禁止操作**: 见 Task Preamble 第 6 条及 CLAUDE.md Agent Safety Guardrails
 - <本 Sprint 专属约束>
 
+## E2E Depth（可选 — Leader 判断需要 E2E 时填写）
+- Depth: quick | standard | deep | auto
+- Notes: <可选，额外验证重点>
+（v2 协议：Agent 自主分析 diff + 验收标准生成验证策略，Leader 无需手写场景）
+
 ## Cost (Leader 填写，Sprint 完成后)
 - Tokens: <estimated total, e.g. 125k input + 38k output>
 - Duration: <wall clock time, e.g. 4m 32s>

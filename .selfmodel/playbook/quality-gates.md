@@ -122,6 +122,27 @@ Evaluator 返回 JSON verdict（schema 见 evaluator-prompt.md）。
 3. 检查 `auto_reject_triggered` 与 `auto_reject_reasons` 的一致性
 4. JSON 格式错误 → 从 Evaluator 文本输出提取关键信息，Leader 补全结构
 
+### Step 4.5: E2E Verdict 合并（v2）
+
+如果当前 Sprint 派发了 E2E Agent v2，在 Evaluator verdict 解析后执行合并：
+
+1. 解析 E2E Verdict JSON v2（含原子 AC 结果 + regression + flaky）
+2. 按以下规则合并 Evaluator 与 E2E 结果：
+
+| Evaluator | E2E | Regression | 最终 | 理由 |
+|-----------|-----|------------|------|------|
+| ACCEPT | PASS | None/Warning | ACCEPT | 完美/非关键回归 |
+| ACCEPT | PASS | Blocker | REVISE | 有阻塞性回归（测试减少/coverage 骤降） |
+| ACCEPT | FAIL | - | REVISE | AC 未满足，blocking_failures 加入 must_fix |
+| ACCEPT | 未派发 | - | ACCEPT | 不需要 E2E |
+| REVISE | PASS/FAIL | - | REVISE | 合并 must_fix + blocking_failures |
+| REJECT | 任何 | - | REJECT | 代码质量太差 |
+| 任何 | FAIL(build) | - | REJECT | 编译失败覆盖 Evaluator |
+
+3. FLAKY 原子验证不影响 verdict（不视为 FAIL），但记录到 flaky_report
+4. 如果 E2E FAIL 导致升级（ACCEPT → REVISE），将 `blocking_failures` 作为额外 `must_fix` 项写入 feedback
+5. 详细协议见 `e2e-protocol-v2.md`
+
 ### Step 5: 判定（Leader 机械执行）
 
 加权平均: `weighted = func×0.30 + quality×0.25 + taste×0.20 + complete×0.15 + original×0.10`
@@ -278,7 +299,7 @@ REVISE 或 REJECT 时写入 `.selfmodel/reviews/sprint-<N>-review.md`：
 
 每次审查追加到 `.selfmodel/state/quality.jsonl`：
 ```json
-{"sprint":1,"agent":"gemini","evaluator":"opus-agent","scores":{"func":8,"quality":7,"taste":6,"complete":9,"original":7},"weighted":7.4,"verdict":"accept","leader_override":null,"ts":"2026-03-28T12:00:00Z"}
+{"sprint":1,"agent":"gemini","evaluator":"opus-agent","scores":{"func":8,"quality":7,"taste":6,"complete":9,"original":7},"weighted":7.4,"verdict":"accept","leader_override":null,"e2e_agent":"opus-agent","e2e_verdict":"PASS","e2e_atoms":{"total":9,"passed":7,"failed":0,"flaky":1,"blocked":1,"explicit_pass":"4/5","implicit_pass":"4/4"},"e2e_change_profile":"backend_only","e2e_depth":"standard","e2e_regressions":0,"final_verdict":"accept","ts":"2026-03-28T12:00:00Z"}
 ```
 
 ---

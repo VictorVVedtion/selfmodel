@@ -88,12 +88,29 @@ LOOP:
 
   5. WAIT for all dispatched agents
 
-  6. EVALUATE each delivered sprint
+  6. EVALUATE + E2E VERIFY each delivered sprint
      a. Quick Scan: 10 auto-reject triggers on git diff
-        - If any trigger → Grade F, skip Evaluator (save cost)
-     b. Prepare eval input → inbox/evaluator/sprint-<N>-eval.md
-     c. Dispatch Independent Evaluator (per evaluator-prompt.md)
-     d. Parse JSON verdict
+        - If any trigger → Grade F, skip Evaluator AND E2E (save cost)
+     b. Parallel dispatch:
+        b1. Prepare eval input → inbox/evaluator/sprint-<N>-eval.md
+            Dispatch Independent Evaluator (per evaluator-prompt.md)
+        b2. IF e2e_needed(sprint):  (see e2e-protocol-v2.md trigger conditions)
+            Write minimal dispatch file → inbox/e2e/sprint-<N>.md
+            (only: worktree path + contract path + depth hint)
+            Dispatch E2E Agent v2 (per e2e-protocol-v2.md)
+            Agent auto: read contract → parse ACs into atomic verifications → probe env → execute atoms → report
+     c. Wait for Evaluator + E2E Agent (if dispatched) to complete
+     d. Parse Evaluator JSON verdict
+     e. Parse E2E JSON verdict (if dispatched)
+     f. Merge verdicts (per e2e-protocol-v2.md verdict merge rules):
+        - Evaluator REJECT → final REJECT (E2E irrelevant)
+        - E2E FAIL(build) → final REJECT (overrides Evaluator)
+        - Evaluator ACCEPT + E2E FAIL → final REVISE
+        - Evaluator ACCEPT + E2E PASS/undispatched → final ACCEPT
+        - Evaluator ACCEPT + E2E PASS + Blocker regression → final REVISE
+        - Evaluator REVISE + E2E PASS/undispatched → final REVISE
+        - Evaluator REVISE + E2E FAIL → final REVISE (merge both must_fix + E2E blocking_failures, see quality-gates.md Step 4.5)
+        - FLAKY atoms do not affect verdict (recorded in flaky_report)
 
   7. ACT on each verdict
      - ACCEPT → merge, archive contract, cleanup worktree

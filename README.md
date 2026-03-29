@@ -4,7 +4,7 @@ A self-evolving AI Agent Team — agents that rewrite their own operating manual
 
 ## What is this?
 
-selfmodel is not a framework. It's a **living system** where AI agents design, implement, test, and improve their own collaboration protocols. The team leader (Claude Opus 4.6) orchestrates but never implements. The team members (Gemini, Codex, Opus Agent, Researcher) execute in isolated git worktrees. The system evolves its own processes through measured feedback loops.
+selfmodel is not a framework. It's a **living system** where AI agents design, implement, test, and improve their own collaboration protocols. The team leader (Claude Opus 4.6) orchestrates but never implements. The team members (Gemini, Codex, Opus Agent, Researcher, E2E Verifier) execute in isolated git worktrees. The system evolves its own processes through measured feedback loops.
 
 **Core thesis**: the best agent team is one that can rewrite its own operating manual.
 
@@ -52,21 +52,25 @@ Inspired by [Anthropic's Harness Design](https://www.anthropic.com/engineering/h
 │    sprint/1-gemini    sprint/2-codex    sprint/3-opus       │
 └─────────────────────────┬──────────────────────────────────┘
                           │
-                  ┌───────▼───────┐
-                  │  git diff →   │
-                  │  Independent  │
-                  │  Evaluator    │◄── skeptical prompt
-                  │  (isolated)   │    + calibration
-                  └───────┬───────┘
-                          │
-                  ┌───────▼───────┐
-                  │  verdict →    │
-                  │  Leader acts  │
-                  │  mechanically │
-                  └───────────────┘
+            ┌─────────────┼─────────────┐
+            │                           │
+    ┌───────▼───────┐           ┌───────▼───────┐
+    │  git diff →   │           │  E2E Agent    │
+    │  Independent  │           │ (Opus/Gemini) │
+    │  Evaluator    │  skepti   │  Runtime      │
+    │  (isolated)   │  cal      │  verification │
+    └───────┬───────┘           └───────┬───────┘
+            │                           │
+            └─────────┬─────────────────┘
+                      │ merge verdicts
+              ┌───────▼───────┐
+              │  verdict →    │
+              │  Leader acts  │
+              │  mechanically │
+              └───────────────┘
 ```
 
-### Six-Role Team
+### Seven-Role Team
 
 | Role | Agent | Model | Responsibility |
 |------|-------|-------|----------------|
@@ -76,6 +80,7 @@ Inspired by [Anthropic's Harness Design](https://www.anthropic.com/engineering/h
 | **Backend Intern** | Codex CLI | GPT-5.4 xhigh fast | Utilities, single-file modules |
 | **Senior Fullstack** | Opus Agent | claude-opus-4-6 | Complex multi-file, cross-cutting work |
 | **Researcher** | Gemini CLI | gemini-3.1-pro-preview | Google Search grounded research. Read-only, no worktree. |
+| **E2E Verifier** | Opus Agent / Gemini CLI | claude-opus-4-6 / gemini-3.1-pro-preview | Runtime verification. Read-only, parallel with Evaluator. |
 
 ### Key Design Decisions
 
@@ -92,6 +97,7 @@ Inspired by [Anthropic's Harness Design](https://www.anthropic.com/engineering/h
 - **Leader decision principles** — 6 principles (Completeness, Blast Radius, Ship > Perfect, DRY, Explicit > Clever, Bias-toward-action) enable Leader to auto-decide intermediate questions without human escalation.
 - **AI Slop detection** — Evaluator penalizes 8 patterns of AI-generated low-quality code (excessive comments, unnecessary abstractions, template error handling, etc.).
 - **Adaptive initialization** — `selfmodel init/adapt` auto-detects tech stack and recommends optimal team composition.
+- **E2E atomic verification (v2)** — E2E Agent v2 uses acceptance criteria as the atomic unit of verification. Each AC from the sprint contract becomes one atomic verification with one command, one expected result, and one piece of evidence. Implicit ACs (build, tests, security) are auto-generated. Dependencies between atoms enable precise root-cause identification: if build fails, downstream AC atoms are BLOCKED (not FAIL). Supports flaky detection, historical delta, and artifact management.
 - **CLAUDE.md in English** — System instructions in English for higher LLM compliance (~3-4%); user interaction in Chinese via `<interaction_protocol>` tag.
 - **Self-evolution** — Every 10 sprints: MEASURE → DIAGNOSE → PROPOSE → EXPERIMENT → EVALUATE → SELECT. Hook interception logs feed into evolution analysis.
 
@@ -119,7 +125,8 @@ selfmodel/
     │   ├── codex/                     # Backend tasks
     │   ├── opus/                      # Fullstack tasks
     │   ├── research/                  # Research queries + reports
-    │   └── evaluator/                 # Evaluator eval files
+    │   ├── evaluator/                 # Evaluator eval files
+    │   └── e2e/                       # E2E verification task files
     ├── state/
     │   ├── team.json                  # Team status + metrics + detected stack
     │   ├── next-session.md            # Cross-session handoff
@@ -135,6 +142,8 @@ selfmodel/
         ├── research-protocol.md       # Researcher types A/B/C + evaluation
         ├── sprint-template.md         # Contract template (with Task Preamble)
         ├── evaluator-prompt.md        # Independent evaluator protocol
+        ├── e2e-protocol-v2.md         # E2E intelligent verification protocol (v2)
+        ├── e2e-protocol.md            # E2E v1 protocol (deprecated)
         ├── orchestration-loop.md      # Automated orchestration loop
         ├── context-protocol.md        # Context checkpoint + reset rules
         └── lessons-learned.md         # Accumulated wisdom
@@ -149,8 +158,9 @@ selfmodel/
 4. Create worktree          → git worktree add sprint-N-<agent>
 5. Agent executes           → isolated, non-interactive, timeout-protected
 6. Leader quick scan        → 10 auto-reject triggers on git diff
-7. Evaluator reviews        → independent evaluator (skeptical prompt, isolated context)
-8. Leader acts on verdict   → ≥7.0 merge | 5.0-6.9 revise | <5.0 reject & redo
+7. Parallel review          → Evaluator (code quality) + E2E Agent v2 (atomic AC verification)
+8. Leader merges verdicts   → E2E FAIL upgrades ACCEPT→REVISE; build FAIL→REJECT; blocker regression→REVISE
+9. Leader acts on verdict   → ≥7.0 merge | 5.0-6.9 revise | <5.0 reject & redo
 ```
 
 ## Hooks Enforcement
