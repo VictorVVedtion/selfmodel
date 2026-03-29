@@ -19,6 +19,9 @@ bash scripts/selfmodel.sh init
 
 # Update playbook and hooks to latest version
 bash scripts/selfmodel.sh update
+
+# Show team health dashboard
+bash scripts/selfmodel.sh status
 ```
 
 Requires: `jq` (`brew install jq` on macOS, `apt install jq` on Linux)
@@ -77,25 +80,29 @@ Inspired by [Anthropic's Harness Design](https://www.anthropic.com/engineering/h
 ### Key Design Decisions
 
 - **Worktree isolation** — Every agent works in a separate git worktree. No shared state pollution. Leader reviews via `git diff`.
-- **Independent evaluation** — Evaluator runs in isolated context with skeptical prompt. Receives only: git diff + sprint contract + calibration. No access to Leader orchestration history.
+- **Independent evaluation** — Evaluator runs in isolated context with skeptical prompt. Receives only: diff-aware focused diff + sprint contract + calibration. No access to Leader orchestration history.
 - **Orchestration loop** — For large projects (10+ sprints), automated loop reads plan file, dispatches agents, dispatches evaluator, acts on verdicts, checkpoints between sprints, resets between phases.
 - **File buffer communication** — Complex prompts written to `.selfmodel/inbox/` files, referenced via `@` syntax. No CLI argument escaping nightmares.
 - **Two-layer silent execution** — `CI=true GIT_TERMINAL_PROMPT=0 timeout 180 <cmd>`. Zero interactive prompts, zero hangs. Never use `yes |` (causes E2BIG with Gemini CLI sandbox).
+- **Atomic commit workflow** — Agents must follow fix → verify → commit cycles. Each independently verifiable change gets its own commit. No monolithic patches.
 - **Small batches** — Each agent task completes in 30–60 seconds. No API timeout risks.
 - **Research before implementation** — Unknown domains must go through Researcher before any Generator is dispatched.
-- **Hooks enforcement** — Claude Code hooks convert CLAUDE.md soft rules into hard constraints (exit 2 = block).
+- **Hooks enforcement** — Claude Code hooks convert CLAUDE.md soft rules into hard constraints (exit 2 = block). Interceptions auto-logged to `state/hook-intercepts.log` for evolution analysis.
+- **Agent safety guardrails** — Agents are forbidden from destructive operations (rm -rf, git push, modifying .selfmodel/), installing global dependencies, or calling production APIs.
+- **Leader decision principles** — 6 principles (Completeness, Blast Radius, Ship > Perfect, DRY, Explicit > Clever, Bias-toward-action) enable Leader to auto-decide intermediate questions without human escalation.
+- **AI Slop detection** — Evaluator penalizes 8 patterns of AI-generated low-quality code (excessive comments, unnecessary abstractions, template error handling, etc.).
 - **Adaptive initialization** — `selfmodel init/adapt` auto-detects tech stack and recommends optimal team composition.
 - **CLAUDE.md in English** — System instructions in English for higher LLM compliance (~3-4%); user interaction in Chinese via `<interaction_protocol>` tag.
-- **Self-evolution** — Every 10 sprints: MEASURE → DIAGNOSE → PROPOSE → EXPERIMENT → EVALUATE → SELECT.
+- **Self-evolution** — Every 10 sprints: MEASURE → DIAGNOSE → PROPOSE → EXPERIMENT → EVALUATE → SELECT. Hook interception logs feed into evolution analysis.
 
 ## Project Structure
 
 ```
 selfmodel/
-├── CLAUDE.md                          # Operating manual (English instructions, ~235 lines)
+├── CLAUDE.md                          # Operating manual (English instructions)
 ├── VERSION                            # Semantic version (0.2.0)
 ├── scripts/
-│   ├── selfmodel.sh                   # CLI: init / adapt / update
+│   ├── selfmodel.sh                   # CLI: init / adapt / update / status
 │   └── hooks/                         # Claude Code enforcement hooks
 │       ├── session-start.sh           # Auto-inject team state on session start
 │       ├── enforce-leader-worktree.sh # Block Leader from editing code directly
@@ -119,15 +126,17 @@ selfmodel/
     │   ├── plan.md                    # Orchestration plan (phases + sprints)
     │   ├── quality.jsonl              # Quality scores (append-only)
     │   ├── orchestration.log          # Orchestration loop event log
+    │   ├── hook-intercepts.log        # Auto-learned hook interception events
     │   └── evolution.jsonl            # Evolution log
     ├── reviews/                       # Review records
     └── playbook/                      # On-demand loaded rules
         ├── dispatch-rules.md          # Routing matrix + CLI templates
-        ├── quality-gates.md           # 5-dimension scoring rubric
+        ├── quality-gates.md           # 5-dimension scoring + AI Slop detection
         ├── research-protocol.md       # Researcher types A/B/C + evaluation
-        ├── sprint-template.md         # Contract template
+        ├── sprint-template.md         # Contract template (with Task Preamble)
         ├── evaluator-prompt.md        # Independent evaluator protocol
         ├── orchestration-loop.md      # Automated orchestration loop
+        ├── context-protocol.md        # Context checkpoint + reset rules
         └── lessons-learned.md         # Accumulated wisdom
 ```
 
@@ -176,12 +185,14 @@ Every deliverable scored on 5 dimensions (see `playbook/quality-gates.md`):
 | Dimension | Weight | Auto-reject if |
 |-----------|--------|----------------|
 | Functionality | 30% | Acceptance criteria not met |
-| Code Quality | 25% | Contains TODO / mock / swallowed exceptions |
+| Code Quality | 25% | Contains TODO / mock / swallowed exceptions / AI Slop |
 | Design Taste | 20% | Generic naming (data/handler/utils) |
 | Completeness | 15% | Missing error handling |
 | Originality | 10% | Brute-force when elegant solution exists |
 
 **Verdict**: ≥7.0 Accept | 5.0–6.9 Revise | <5.0 Reject & redo
+
+**Diff-aware review**: Evaluator receives only the files listed in Deliverables, not full diff. Peripheral changes are noted but don't drive scoring.
 
 ## Iron Rules
 
