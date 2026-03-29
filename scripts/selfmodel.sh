@@ -148,9 +148,10 @@ recommend_team() {
     local has_frontend="$2"
     local has_backend="$3"
 
-    # Leader + Researcher are always present
-    local agents='"leader": {"status": "idle", "role": "leader_evaluator"}'
+    # Leader + Researcher + Evaluator are always present
+    local agents='"leader": {"status": "idle", "role": "leader_orchestrator"}'
     agents+=', "researcher": {"status": "idle", "role": "researcher", "config": {"engine": "gemini-cli", "model": "gemini-3.1-pro-preview", "timeout": 300, "requires_worktree": false}}'
+    agents+=', "evaluator": {"status": "idle", "role": "independent_evaluator", "evaluations_completed": 0, "avg_score_given": 0, "channel": "opus-agent", "fallback_channel": "gemini", "config": {"timeout": 120, "requires_worktree": false, "skeptical_prompt": true}}'
 
     case "$type" in
         fullstack)
@@ -183,12 +184,13 @@ create_structure() {
     mkdir -p "$dir/.selfmodel/inbox/codex"
     mkdir -p "$dir/.selfmodel/inbox/opus"
     mkdir -p "$dir/.selfmodel/inbox/research"
+    mkdir -p "$dir/.selfmodel/inbox/evaluator"
     mkdir -p "$dir/.selfmodel/reviews"
     mkdir -p "$dir/.selfmodel/state"
     mkdir -p "$dir/.selfmodel/playbook"
 
     # .gitkeep for empty directories
-    for d in contracts/active contracts/archive inbox/gemini inbox/codex inbox/opus inbox/research reviews; do
+    for d in contracts/active contracts/archive inbox/gemini inbox/codex inbox/opus inbox/research inbox/evaluator reviews; do
         touch "$dir/.selfmodel/$d/.gitkeep"
     done
 }
