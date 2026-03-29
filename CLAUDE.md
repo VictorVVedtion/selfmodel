@@ -83,9 +83,9 @@ cd <worktree> && CI=true GIT_TERMINAL_PROMPT=0 yes | timeout 180 codex exec \
 # → Agent tool: prompt=<任务>, isolation="worktree", model: opus
 
 # Researcher (Google Search 接地 — 只读，不需要 worktree)
-CI=true timeout 300 gemini -G \
+CI=true yes | timeout 300 gemini -G \
   "@/Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/research/sprint-<N>-query.md 基于上述问题进行深度调研" \
-  -s
+  -s 2>&1 | tee /Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/research/sprint-<N>-report.md
 ```
 
 ### 并行调度

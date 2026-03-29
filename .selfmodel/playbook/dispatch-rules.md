@@ -15,8 +15,9 @@
 | 调研 / research / 选型 / 对比 / best practice / 怎么做 / 最佳方案 | **Researcher** | Google Search 接地，搜索深度和实时性最强 |
 | 技术选型 / 库对比 / 方案评估 | **Researcher → Leader** | 先搜再判，研究报告输入 Leader 决策 |
 
-**路由冲突优先级**: Leader > Opus Agent > Gemini > Codex
+**路由冲突优先级**: Leader > Researcher > Opus Agent > Gemini > Codex
 **研究前置**: 涉及未知领域的实现任务，先派 Researcher 再派 Generator
+**研究 vs 实现**: 任务同时匹配研究和实现信号时，Researcher 优先（先搜再做）
 **判断困难时**: 默认路由到 Opus Agent（安全选择，能力最全面）。
 
 ---
@@ -71,12 +72,10 @@ Agent tool:
 3. 执行：
 
 ```bash
-CI=true timeout 300 gemini -G \
+CI=true yes | timeout 300 gemini -G \
   "@/Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/research/sprint-<N>-query.md 基于上述问题进行深度调研" \
-  -s
+  -s 2>&1 | tee /Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/research/sprint-<N>-report.md
 ```
-
-4. Leader 捕获输出，写入 `.selfmodel/inbox/research/sprint-<N>-report.md`
 
 **三层研究管道**（复杂调研时启用）：
 
@@ -143,8 +142,18 @@ Layer 3 — 交叉验证:
 
 ## Backpressure 协议
 
+### Generator（Gemini/Codex/Opus）
+
 1. **第一次超时** → 相同 timeout 重试一次
 2. **第二次超时** → 拆分为更小子 Sprint，每个 ≤60s
 3. **第三次超时** → 升级到 Leader 手动介入，记录到 lessons-learned.md
 
 失败时保留 worktree 不清理，便于诊断。
+
+### Researcher
+
+1. **第一次超时/失败** → 相同 timeout 重试一次
+2. **第二次超时/失败** → 降级通道：Gemini -G → Leader 用 WebSearch + WebFetch 自研
+3. **第三次失败** → Leader 用 Chrome MCP 手动搜索 → 记录到 lessons-learned.md
+
+降级链: `Gemini -G` → `WebSearch + WebFetch` → `Chrome MCP` → `Leader 自研`
