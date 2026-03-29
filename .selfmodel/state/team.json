@@ -35,24 +35,29 @@
       "last_sprint": null,
       "last_score": null,
       "config": {
-        "engine": "gemini-cli-grounded",
+        "engine": "gemini-cli",
         "model": "gemini-3.1-pro-preview",
         "timeout": 300,
-        "layers": ["gemini-g", "notebooklm", "context7", "webfetch", "chrome"],
         "requires_worktree": false
       }
     }
   },
   "evolution": {
     "last_review_sprint": 0,
-    "protocol_version": "0.1.0",
+    "protocol_version": "0.2.0",
     "experiments_active": []
+  },
+  "detected_stack": {
+    "type": "unknown",
+    "stacks": [],
+    "frameworks": [],
+    "test_tools": []
   },
   "skills_evaluated": {},
   "worktrees_active": [],
   "meta": {
     "state_version": 1,
-    "last_modified": "2026-03-28T00:00:00Z",
-    "last_modified_by": "init"
+    "last_modified": "2026-03-29T01:30:00Z",
+    "last_modified_by": "manual-restore"
   }
 }
