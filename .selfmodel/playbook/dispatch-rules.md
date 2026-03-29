@@ -34,7 +34,7 @@
 
 ```bash
 cd <worktree-path> && \
-CI=true GIT_TERMINAL_PROMPT=0 yes | timeout 180 gemini \
+CI=true GIT_TERMINAL_PROMPT=0 timeout 180 gemini \
   "@/Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/gemini/sprint-<N>.md 执行上述任务" \
   -s --yolo
 ```
@@ -47,7 +47,7 @@ CI=true GIT_TERMINAL_PROMPT=0 yes | timeout 180 gemini \
 
 ```bash
 cd <worktree-path> && \
-CI=true GIT_TERMINAL_PROMPT=0 yes | timeout 180 codex exec \
+CI=true GIT_TERMINAL_PROMPT=0 timeout 180 codex exec \
   "Read /Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/codex/sprint-<N>.md and implement exactly as specified. Working directory: $(pwd)" \
   --full-auto
 ```
@@ -150,11 +150,14 @@ Layer 3 — 交叉验证:
 
 | Layer | 机制 | 作用 |
 |---|---|---|
-| 1 | `yes \|` | 吞掉 Y/n 交互提示 |
-| 2 | `CI=true GIT_TERMINAL_PROMPT=0` | 环境变量跳过交互 |
-| 3 | `timeout <N>` | 硬超时，超时即 kill |
+| 1 | `CI=true GIT_TERMINAL_PROMPT=0` | 环境变量跳过交互 |
+| 2 | `timeout <N>` | 硬超时，超时即 kill |
 
-完整模式: `CI=true GIT_TERMINAL_PROMPT=0 yes | timeout <N> <command>`
+完整模式: `CI=true GIT_TERMINAL_PROMPT=0 timeout <N> <command>`
+
+**CRITICAL**: 不要使用 `yes |` 管道。`yes` 的无限 stdin 流在 Gemini CLI sandbox
+relaunch 时导致 `spawn E2BIG`（stdin buffer 积累数 MB 数据超出 execve ARG_MAX）。
+Gemini `--yolo` 和 Codex `--full-auto` 已原生处理交互确认，`yes |` 完全不需要。
 
 ---
 

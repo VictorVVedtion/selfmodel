@@ -22,7 +22,7 @@ Only code, CLI commands, and file content may be in English.
 7. **No Implementation** — Leader ONLY orchestrates, reviews, and arbitrates. NEVER writes implementation code directly. Delegate to Agents via Sprint contracts.
 8. **No Self-Review** — Implementer ≠ Evaluator. Independent Evaluator reviews all output (skeptical prompt, isolated context). Leader arbitrates only on Evaluator disputes.
 9. **File Buffer Only** — Complex prompts MUST be written to `.selfmodel/inbox/<agent>/` files. CLI only references file paths. NEVER pass raw prompts via CLI arguments.
-10. **No Interactive** — All commands: `CI=true yes | timeout <N> <cmd>`. Zero interactive prompts allowed.
+10. **No Interactive** — All commands: `CI=true GIT_TERMINAL_PROMPT=0 timeout <N> <cmd>`. Zero interactive prompts allowed. Do NOT use `yes |` (causes E2BIG).
 11. **Small Batch** — Each agent task completes in 30-60 seconds. Timeout → retry → escalate.
 12. **Efficiency First** — Parallelize everything with no dependencies. Dispatch multiple agents simultaneously. Maximize throughput.
 
@@ -70,29 +70,32 @@ Complex prompts MUST NEVER be passed via CLI arguments. Write to file, then refe
 # Step 1: Leader writes task to inbox
 #   → .selfmodel/inbox/gemini/sprint-<N>.md
 # Step 2: CLI references file only
-CI=true timeout 180 gemini \
+CI=true GIT_TERMINAL_PROMPT=0 timeout 180 gemini \
   "@/Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/gemini/sprint-<N>.md execute task" \
   -s --yolo
 ```
 
-### Three-Layer Silent Execution
+### Two-Layer Silent Execution
 
 ```bash
-yes |              # Layer 1: swallow Y/n prompts
-CI=true            # Layer 2: skip tool interactions
+CI=true            # Layer 1: skip tool interactions
 GIT_TERMINAL_PROMPT=0
-timeout 180        # Layer 3: hard timeout safety net
+timeout 180        # Layer 2: hard timeout safety net
 ```
+
+**WARNING**: Do NOT use `yes |` pipe with Gemini CLI. The infinite stdin stream causes
+`spawn E2BIG` when Gemini's sandbox relaunches. Use `--yolo` flag instead (auto-approves tool calls).
+Codex `--full-auto` also handles this natively. `yes |` is never needed.
 
 ### CLI Quick Reference
 
 ```bash
 # Gemini (@ syntax reads file)
-cd <worktree> && CI=true GIT_TERMINAL_PROMPT=0 yes | timeout 180 gemini \
+cd <worktree> && CI=true GIT_TERMINAL_PROMPT=0 timeout 180 gemini \
   "@.selfmodel/inbox/gemini/sprint-<N>.md execute task" -s --yolo
 
 # Codex (Read directive reads file)
-cd <worktree> && CI=true GIT_TERMINAL_PROMPT=0 yes | timeout 180 codex exec \
+cd <worktree> && CI=true GIT_TERMINAL_PROMPT=0 timeout 180 codex exec \
   "Read .selfmodel/inbox/codex/sprint-<N>.md and implement exactly as specified" --full-auto
 
 # Opus Agent (native Agent tool — auto-managed worktree)
