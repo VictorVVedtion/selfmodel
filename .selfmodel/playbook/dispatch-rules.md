@@ -105,7 +105,7 @@ CI=true timeout 120 gemini \
 
 1. Leader 写入最小化 dispatch 文件：`.selfmodel/inbox/e2e/sprint-<N>.md`（仅 worktree 路径 + 合约路径 + depth hint）
 2. **与 Evaluator 并行派发**（步骤 6 中同时触发）
-3. Agent 自主：读合约 → 读 diff → 探测环境 → 生成场景 → 执行 8 层验证金字塔 → 报告
+3. Agent 自主：读合约 → 解析 AC 为原子验证 → 探测环境 → 逐条执行 → 逐条举证 → 报告
 
 **Opus Agent 通道（主通道 — claude-opus-4-6）**:
 
@@ -113,10 +113,12 @@ CI=true timeout 120 gemini \
 Agent tool:
   prompt: |
     You are the E2E Verification Agent v2 (Opus 4.6).
-    Your mission: VERIFY that delivered code works at runtime. You do NOT modify code.
-    YOUR KEY ADVANTAGE: You can READ the diff, UNDERSTAND intent from acceptance
-    criteria, and VERIFY behavior dynamically. No pre-written test scripts needed.
-    Workflow: UNDERSTAND → PROBE → PLAN → SETUP → EXECUTE → RETRY → TEARDOWN → REPORT
+    Mission: verify delivered code works at runtime. Do NOT modify code.
+    CORE PRINCIPLE: The atom of verification is the Acceptance Criterion.
+    Parse every AC from the contract into atomic verifications.
+    Each AC = one command + one expected result + one evidence.
+    Also verify implicit ACs (files exist, build passes, tests pass).
+    Workflow: UNDERSTAND → PROBE → DECOMPOSE → SETUP → EXECUTE → RETRY → TEARDOWN → REPORT
     Constraints: no code modification, no global installs, no prod APIs, no git push.
     Save artifacts to: .selfmodel/artifacts/sprint-<N>/
     Verification file: /Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/e2e/sprint-<N>.md
@@ -125,12 +127,12 @@ Agent tool:
   model: opus
 ```
 
-**Gemini CLI 通道（降级，仅 Layer 0-1）**:
+**Gemini CLI 通道（降级，仅隐式 AC）**:
 
 ```bash
 cd <worktree-path> && \
 CI=true GIT_TERMINAL_PROMPT=0 timeout 120 gemini \
-  "@/Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/e2e/sprint-<N>.md Execute only Layer 0 and Layer 1. Output JSON." \
+  "@/Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/e2e/sprint-<N>.md Verify only implicit ACs (files exist, build passes). Output JSON." \
   -s --yolo
 ```
 

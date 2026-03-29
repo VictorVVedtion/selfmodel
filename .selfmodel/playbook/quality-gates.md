@@ -299,7 +299,7 @@ REVISE 或 REJECT 时写入 `.selfmodel/reviews/sprint-<N>-review.md`：
 
 每次审查追加到 `.selfmodel/state/quality.jsonl`：
 ```json
-{"sprint":1,"agent":"gemini","evaluator":"opus-agent","scores":{"func":8,"quality":7,"taste":6,"complete":9,"original":7},"weighted":7.4,"verdict":"accept","leader_override":null,"e2e_agent":"opus-agent","e2e_verdict":"PASS","e2e_scenarios":{"total":14,"passed":12,"failed":0,"flaky":1,"skipped":1},"e2e_layers":{"active":[0,1,2,3,7],"passed":[0,1,2,3,7],"failed":[],"flaky":[]},"e2e_change_profile":"backend_only","e2e_depth":"standard","e2e_regressions":0,"e2e_delta":{"build_time":"+5%","test_count":"+2"},"final_verdict":"accept","ts":"2026-03-28T12:00:00Z"}
+{"sprint":1,"agent":"gemini","evaluator":"opus-agent","scores":{"func":8,"quality":7,"taste":6,"complete":9,"original":7},"weighted":7.4,"verdict":"accept","leader_override":null,"e2e_agent":"opus-agent","e2e_verdict":"PASS","e2e_atoms":{"total":9,"passed":7,"failed":0,"flaky":1,"blocked":1,"explicit_pass":"4/5","implicit_pass":"4/4"},"e2e_change_profile":"backend_only","e2e_depth":"standard","e2e_regressions":0,"final_verdict":"accept","ts":"2026-03-28T12:00:00Z"}
 ```
 
 ---

@@ -97,7 +97,7 @@ Inspired by [Anthropic's Harness Design](https://www.anthropic.com/engineering/h
 - **Leader decision principles** — 6 principles (Completeness, Blast Radius, Ship > Perfect, DRY, Explicit > Clever, Bias-toward-action) enable Leader to auto-decide intermediate questions without human escalation.
 - **AI Slop detection** — Evaluator penalizes 8 patterns of AI-generated low-quality code (excessive comments, unnecessary abstractions, template error handling, etc.).
 - **Adaptive initialization** — `selfmodel init/adapt` auto-detects tech stack and recommends optimal team composition.
-- **E2E intelligent verification (v2)** — E2E Agent v2 is an AI-native verification engine. It reads the diff, understands acceptance criteria, auto-generates verification scenarios across an 8-layer pyramid (smoke → build → tests → integration → browser → visual → performance → security). Lower layer failure blocks upper layers. Supports flaky detection, historical delta comparison, and artifact management.
+- **E2E atomic verification (v2)** — E2E Agent v2 uses acceptance criteria as the atomic unit of verification. Each AC from the sprint contract becomes one atomic verification with one command, one expected result, and one piece of evidence. Implicit ACs (build, tests, security) are auto-generated. Dependencies between atoms enable precise root-cause identification: if build fails, downstream AC atoms are BLOCKED (not FAIL). Supports flaky detection, historical delta, and artifact management.
 - **CLAUDE.md in English** — System instructions in English for higher LLM compliance (~3-4%); user interaction in Chinese via `<interaction_protocol>` tag.
 - **Self-evolution** — Every 10 sprints: MEASURE → DIAGNOSE → PROPOSE → EXPERIMENT → EVALUATE → SELECT. Hook interception logs feed into evolution analysis.
 
@@ -158,7 +158,7 @@ selfmodel/
 4. Create worktree          → git worktree add sprint-N-<agent>
 5. Agent executes           → isolated, non-interactive, timeout-protected
 6. Leader quick scan        → 10 auto-reject triggers on git diff
-7. Parallel review          → Evaluator (code quality) + E2E Agent v2 (8-layer pyramid, auto-scenarios)
+7. Parallel review          → Evaluator (code quality) + E2E Agent v2 (atomic AC verification)
 8. Leader merges verdicts   → E2E FAIL upgrades ACCEPT→REVISE; build FAIL→REJECT; blocker regression→REVISE
 9. Leader acts on verdict   → ≥7.0 merge | 5.0-6.9 revise | <5.0 reject & redo
 ```
