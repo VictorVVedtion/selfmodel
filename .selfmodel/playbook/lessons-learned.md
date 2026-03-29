@@ -16,6 +16,18 @@
 
 ---
 
+## Auto-Learned
+
+Hook 拦截记录。每次 hook exit 2 自动追加（由 hook 脚本写入）。
+Leader 每 10 sprint 审查，提取有价值的经验升级为正式 Log 条目。
+
+### Format
+```
+[<timestamp>] hook=<hook-name> command=<blocked-command-summary> reason=<why-blocked>
+```
+
+---
+
 ## Log
 
 ### Sprint 1: Gemini CLI -G flag 不存在

@@ -39,6 +39,11 @@ CI=true GIT_TERMINAL_PROMPT=0 timeout 180 gemini \
   -s --yolo
 ```
 
+**Atomic Commit Workflow**:
+Agent 必须遵循 fix → verify → commit 循环。每个可独立验证的变更单独 commit。
+禁止在 worktree 中积累所有变更后一次性 commit。
+Commit message 格式: `sprint-<N>: <concise description of change>`
+
 ### Codex（文件缓冲）
 
 1. Leader 将完整任务写入：`.selfmodel/inbox/codex/sprint-<N>.md`
@@ -52,7 +57,16 @@ CI=true GIT_TERMINAL_PROMPT=0 timeout 180 codex exec \
   --full-auto
 ```
 
-### Opus Agent（原生 Agent tool）
+**Atomic Commit Workflow**:
+Agent 必须遵循 fix → verify → commit 循环。每个可独立验证的变更单独 commit。
+禁止在 worktree 中积累所有变更后一次性 commit。
+Commit message 格式: `sprint-<N>: <concise description of change>`
+
+### Opus Agent（原生 Agent tool — 自带 worktree 隔离）
+
+**Atomic Commit Workflow**:
+Agent 必须遵循 fix → verify → commit 循环。每个可独立验证的变更单独 commit。
+Commit message 格式: `sprint-<N>: <concise description of change>`
 
 通过 Claude Code 的 Agent tool 调用，自带 worktree 隔离：
 

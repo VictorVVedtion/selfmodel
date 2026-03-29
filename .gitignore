@@ -35,3 +35,12 @@ build/
 
 # === Claude Code local ===
 .claude/settings.local.json
+.claude/watchdog.local.json
+.claude/watchdog.log
+
+# === Benchmark ===
+benchmark/workspace/
+benchmark/predictions/
+benchmark/results/
+benchmark/inbox/
+logs/
