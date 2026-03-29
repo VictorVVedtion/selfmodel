@@ -365,6 +365,9 @@ cmd_init() {
     # Copy playbook from repo (or generate defaults)
     generate_playbook "$dir"
 
+    # Generate hooks and merge settings.json
+    generate_hooks "$dir"
+
     # Generate or inject CLAUDE.md
     generate_claude_md "$dir"
 
@@ -435,6 +438,9 @@ cmd_adapt() {
         fi
     fi
 
+    # Generate hooks and merge settings.json
+    generate_hooks "$dir"
+
     # Handle CLAUDE.md — inject rather than overwrite
     if [[ -f "$dir/CLAUDE.md" ]]; then
         if grep -q '<!-- selfmodel:start -->' "$dir/CLAUDE.md" 2>/dev/null; then
@@ -468,6 +474,9 @@ cmd_update() {
 
     # Update playbook files (framework layer)
     generate_playbook "$dir"
+
+    # Update hooks and merge settings.json
+    generate_hooks "$dir"
 
     # Update team.json with new detection but preserve sprints/scores
     if [[ -f "$dir/.selfmodel/state/team.json" ]]; then
@@ -575,6 +584,390 @@ LESSONSEOF
     fi
 
     ok "Playbook generated."
+}
+
+# ─── Generate Hooks ──────────────────────────────────────────────────────────
+# Write hook scripts via Heredoc and merge hooks config into settings.json
+generate_hooks() {
+    local dir="${1:-.}"
+    local hooks_dir="$dir/scripts/hooks"
+    local settings_file="$dir/.claude/settings.json"
+    local ts
+    ts=$(date +%s)
+
+    mkdir -p "$hooks_dir"
+    mkdir -p "$dir/.claude"
+
+    # ── A. Generate hook scripts ─────────────────────────────────────────────
+
+    # Helper: backup existing file before overwrite
+    _backup_hook() {
+        local target="$1"
+        local name
+        name=$(basename "$target")
+        if [[ -f "$target" ]]; then
+            local bak="${target}.bak.${ts}"
+            cp "$target" "$bak"
+            info "Backed up: ${name} → .bak.${ts}"
+        fi
+    }
+
+    # 1. session-start.sh
+    _backup_hook "$hooks_dir/session-start.sh"
+    cat > "$hooks_dir/session-start.sh" << 'HOOKEOF'
+#!/usr/bin/env bash
+# session-start.sh — SessionStart hook
+# Session 启动时注入 team.json 和 next-session.md 上下文
+# 输出内容会被 Claude Code 自动读取作为启动上下文
+# 始终 exit 0，绝不阻断启动
+
+set -euo pipefail
+
+# 项目根目录（hook 从项目根运行）
+PROJECT_ROOT="${PWD}"
+
+TEAM_JSON="${PROJECT_ROOT}/.selfmodel/state/team.json"
+NEXT_SESSION="${PROJECT_ROOT}/.selfmodel/state/next-session.md"
+
+echo "═══════════════════════════════════════════════════"
+echo "📋 Session Start — 自动上下文注入"
+echo "═══════════════════════════════════════════════════"
+
+# 注入 team.json
+echo ""
+echo "── Team State ──"
+if [[ -f "${TEAM_JSON}" ]]; then
+    cat "${TEAM_JSON}"
+else
+    echo "（team.json 不存在，跳过）"
+fi
+
+# 注入 next-session.md
+echo ""
+echo "── Next Session Handoff ──"
+if [[ -f "${NEXT_SESSION}" ]]; then
+    cat "${NEXT_SESSION}"
+else
+    echo "（next-session.md 不存在，跳过）"
+fi
+
+echo ""
+echo "═══════════════════════════════════════════════════"
+
+exit 0
+HOOKEOF
+    chmod +x "$hooks_dir/session-start.sh"
+    ok "Hook generated: session-start.sh"
+
+    # 2. enforce-leader-worktree.sh
+    _backup_hook "$hooks_dir/enforce-leader-worktree.sh"
+    cat > "$hooks_dir/enforce-leader-worktree.sh" << 'HOOKEOF'
+#!/usr/bin/env bash
+# enforce-leader-worktree.sh — PreToolUse hook (matcher: Write|Edit)
+# 强制执行「Leader 不下场」规则：白名单外的代码修改被拦截
+# 从 stdin 读取 JSON，提取 tool_input.file_path 进行白名单检查
+# exit 0 = 放行 | exit 2 = 拦截
+
+set -euo pipefail
+
+# ── 紧急绕过 ──
+if [[ "${BYPASS_LEADER_RULES:-0}" == "1" ]]; then
+    exit 0
+fi
+
+# ── jq 依赖检测：缺失时放行，绝不误拦截 ──
+if ! command -v jq &>/dev/null; then
+    exit 0
+fi
+
+# ── 读取 stdin ──
+INPUT="$(cat)"
+if [[ -z "${INPUT}" ]]; then
+    exit 0
+fi
+
+# ── 提取文件路径 ──
+FILE_PATH="$(printf '%s' "${INPUT}" | jq -r '.tool_input.file_path // empty' 2>/dev/null)"
+if [[ -z "${FILE_PATH}" ]]; then
+    # 无法提取路径（可能是非文件操作），放行
+    exit 0
+fi
+
+# ── 白名单规则 ──
+# 规范化路径：移除可能的前导 ./ 和绝对路径前缀
+NORMALIZED="${FILE_PATH}"
+# 去除绝对路径前缀（如果包含项目根路径）
+NORMALIZED="${NORMALIZED#"${PWD}/"}"
+# 去除前导 ./
+NORMALIZED="${NORMALIZED#./}"
+
+# 1. .selfmodel/ 目录（合约、inbox、state、playbook 等）
+if [[ "${NORMALIZED}" == .selfmodel/* ]]; then
+    exit 0
+fi
+
+# 2. .claude/ 目录（settings、watchdog 等）
+if [[ "${NORMALIZED}" == .claude/* ]]; then
+    exit 0
+fi
+
+# 3. scripts/ 目录（hook 脚本、工具脚本）
+if [[ "${NORMALIZED}" == scripts/* ]]; then
+    exit 0
+fi
+
+# 4. playbook/ 目录（规则文件）
+if [[ "${NORMALIZED}" == playbook/* ]]; then
+    exit 0
+fi
+
+# 5. 任何 .md 文件（Leader 可以写文档）
+if [[ "${NORMALIZED}" == *.md ]]; then
+    exit 0
+fi
+
+# 6. .gitignore
+if [[ "${NORMALIZED}" == .gitignore ]]; then
+    exit 0
+fi
+
+# ── 白名单外：拦截 ──
+{
+    echo "🚨 [Hook 拦截] 违反「Leader 不下场」规则"
+    echo ""
+    echo "被拦截文件: ${FILE_PATH}"
+    echo ""
+    echo "Leader 角色只负责编排、审查、仲裁，不直接修改业务代码。"
+    echo "白名单范围: .selfmodel/、.claude/、scripts/、playbook/、*.md、.gitignore"
+    echo ""
+    echo "正确做法:"
+    echo "  1. 在 .selfmodel/contracts/active/ 下创建 Sprint 合约"
+    echo "  2. 在 .selfmodel/inbox/<agent>/ 下写入任务文件"
+    echo "  3. 派遣 Agent（Gemini/Codex/Opus）到独立 worktree 中实现代码修改"
+    echo ""
+    echo "如需紧急绕过，使用: BYPASS_LEADER_RULES=1"
+} >&2
+
+exit 2
+HOOKEOF
+    chmod +x "$hooks_dir/enforce-leader-worktree.sh"
+    ok "Hook generated: enforce-leader-worktree.sh"
+
+    # 3. enforce-agent-rules.sh
+    _backup_hook "$hooks_dir/enforce-agent-rules.sh"
+    cat > "$hooks_dir/enforce-agent-rules.sh" << 'HOOKEOF'
+#!/usr/bin/env bash
+# enforce-agent-rules.sh — PreToolUse hook (matcher: Bash)
+# 强制执行「合约前置」和「Inbox 缓冲通信」规则
+# 检测 gemini/codex 调用命令，确保有活跃合约和 inbox 任务文件
+# exit 0 = 放行 | exit 2 = 拦截
+
+set -euo pipefail
+
+# ── 紧急绕过 ──
+if [[ "${BYPASS_AGENT_RULES:-0}" == "1" ]]; then
+    exit 0
+fi
+
+# ── jq 依赖检测：缺失时放行，绝不误拦截 ──
+if ! command -v jq &>/dev/null; then
+    exit 0
+fi
+
+# ── 读取 stdin ──
+INPUT="$(cat)"
+if [[ -z "${INPUT}" ]]; then
+    exit 0
+fi
+
+# ── 提取 bash 命令 ──
+COMMAND="$(printf '%s' "${INPUT}" | jq -r '.tool_input.command // empty' 2>/dev/null)"
+if [[ -z "${COMMAND}" ]]; then
+    exit 0
+fi
+
+# ── 检测是否为 agent 调用命令 ──
+HAS_GEMINI=false
+HAS_CODEX=false
+
+# 使用 grep 进行大小写敏感匹配
+if printf '%s' "${COMMAND}" | grep -q 'gemini'; then
+    HAS_GEMINI=true
+fi
+if printf '%s' "${COMMAND}" | grep -q 'codex'; then
+    HAS_CODEX=true
+fi
+
+# 不包含 agent 关键词的普通命令，直接放行
+if [[ "${HAS_GEMINI}" == "false" && "${HAS_CODEX}" == "false" ]]; then
+    exit 0
+fi
+
+# ── 合约前置检查 ──
+# 检查 .selfmodel/contracts/active/ 下是否有至少一个 .md 文件
+ACTIVE_CONTRACT_COUNT=0
+if [[ -d ".selfmodel/contracts/active" ]]; then
+    while IFS= read -r -d '' _; do
+        ACTIVE_CONTRACT_COUNT=$((ACTIVE_CONTRACT_COUNT + 1))
+    done < <(find .selfmodel/contracts/active -maxdepth 1 -name "*.md" -print0 2>/dev/null)
+fi
+
+if [[ "${ACTIVE_CONTRACT_COUNT}" -eq 0 ]]; then
+    {
+        echo "🚨 [Hook 拦截] 违反「Sprint 合约制」规则"
+        echo ""
+        echo "被拦截命令: ${COMMAND}"
+        echo ""
+        echo "调用 Agent 前必须有活跃的 Sprint 合约。"
+        echo ""
+        echo "正确做法:"
+        echo "  1. 复制 .selfmodel/playbook/sprint-template.md 为模板"
+        echo "  2. 在 .selfmodel/contracts/active/ 下创建合约文件"
+        echo "  3. 填写目标、交付物、验收标准"
+        echo "  4. 然后再调用 Agent"
+        echo ""
+        echo "如需紧急绕过，使用: BYPASS_AGENT_RULES=1"
+    } >&2
+    exit 2
+fi
+
+# ── Inbox 缓冲检查 ──
+if [[ "${HAS_GEMINI}" == "true" ]]; then
+    # Gemini CLI 有两种用途：Frontend (inbox/gemini/) 和 Researcher (inbox/research/)
+    # 任一 inbox 有 .md 文件即放行
+    GEMINI_INBOX_COUNT=0
+    for inbox_dir in ".selfmodel/inbox/gemini" ".selfmodel/inbox/research"; do
+        if [[ -d "${inbox_dir}" ]]; then
+            while IFS= read -r -d '' _; do
+                GEMINI_INBOX_COUNT=$((GEMINI_INBOX_COUNT + 1))
+            done < <(find "${inbox_dir}" -maxdepth 1 -name "*.md" -print0 2>/dev/null)
+        fi
+    done
+
+    if [[ "${GEMINI_INBOX_COUNT}" -eq 0 ]]; then
+        {
+            echo "🚨 [Hook 拦截] 违反「通信缓冲隔离」规则"
+            echo ""
+            echo "被拦截命令: ${COMMAND}"
+            echo ""
+            echo "调用 Gemini CLI 前必须将任务上下文写入 inbox 文件。"
+            echo ""
+            echo "正确做法:"
+            echo "  Frontend 任务: 在 .selfmodel/inbox/gemini/ 下创建任务文件"
+            echo "  Researcher 任务: 在 .selfmodel/inbox/research/ 下创建查询文件"
+            echo ""
+            echo "如需紧急绕过，使用: BYPASS_AGENT_RULES=1"
+        } >&2
+        exit 2
+    fi
+fi
+
+if [[ "${HAS_CODEX}" == "true" ]]; then
+    CODEX_INBOX_COUNT=0
+    if [[ -d ".selfmodel/inbox/codex" ]]; then
+        while IFS= read -r -d '' _; do
+            CODEX_INBOX_COUNT=$((CODEX_INBOX_COUNT + 1))
+        done < <(find .selfmodel/inbox/codex -maxdepth 1 -name "*.md" -print0 2>/dev/null)
+    fi
+
+    if [[ "${CODEX_INBOX_COUNT}" -eq 0 ]]; then
+        {
+            echo "🚨 [Hook 拦截] 违反「通信缓冲隔离」规则"
+            echo ""
+            echo "被拦截命令: ${COMMAND}"
+            echo ""
+            echo "调用 Codex Agent 前必须将任务上下文写入 inbox 文件。"
+            echo ""
+            echo "正确做法:"
+            echo "  1. 在 .selfmodel/inbox/codex/ 下创建任务 Markdown 文件"
+            echo "  2. 写入详细的任务描述、上下文、约束条件"
+            echo "  3. CLI 命令中用 Read 指令引用文件"
+            echo "  4. 示例: codex exec \"Read .selfmodel/inbox/codex/sprint-N.md and implement\" --full-auto"
+            echo ""
+            echo "如需紧急绕过，使用: BYPASS_AGENT_RULES=1"
+        } >&2
+        exit 2
+    fi
+fi
+
+# 所有检查通过
+exit 0
+HOOKEOF
+    chmod +x "$hooks_dir/enforce-agent-rules.sh"
+    ok "Hook generated: enforce-agent-rules.sh"
+
+    # ── B. Merge settings.json ───────────────────────────────────────────────
+
+    local hooks_config
+    hooks_config=$(cat << 'JSONEOF'
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "bash scripts/hooks/session-start.sh"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/hooks/enforce-leader-worktree.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/hooks/enforce-agent-rules.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
+JSONEOF
+    )
+
+    if [[ ! -f "$settings_file" ]]; then
+        # No existing settings.json — write directly
+        printf '%s\n' "$hooks_config" > "$settings_file"
+        ok "settings.json created with hooks config."
+    elif command -v jq &>/dev/null; then
+        # Existing settings.json + jq available — deep merge (idempotent)
+        if ! jq empty "$settings_file" 2>/dev/null; then
+            # Invalid JSON — backup and write fresh
+            warn "settings.json has invalid JSON. Backing up and writing fresh config."
+            cp "$settings_file" "${settings_file}.bak.${ts}"
+            printf '%s\n' "$hooks_config" > "$settings_file"
+            ok "settings.json replaced (backup: settings.json.bak.${ts})."
+        else
+            # Deep merge: existing * hooks_config (hooks key is overwritten for idempotency)
+            local tmp
+            tmp=$(mktemp)
+            if jq -s '.[0] * .[1]' "$settings_file" <(printf '%s\n' "$hooks_config") > "$tmp" 2>/dev/null \
+               && jq empty "$tmp" 2>/dev/null; then
+                mv "$tmp" "$settings_file"
+                ok "settings.json hooks merged."
+            else
+                rm -f "$tmp"
+                warn "jq merge failed. settings.json unchanged."
+            fi
+        fi
+    else
+        # No jq — cannot safely merge
+        if grep -q '"hooks"' "$settings_file" 2>/dev/null; then
+            warn "jq not found. settings.json already has hooks config — skipping (manual merge may be needed)."
+        else
+            warn "jq not found. Writing default settings.json (manual merge may be needed)."
+            cp "$settings_file" "${settings_file}.bak.${ts}"
+            printf '%s\n' "$hooks_config" > "$settings_file"
+        fi
+    fi
 }
 
 # ─── Generate dispatch-rules.md ──────────────────────────────────────────────
