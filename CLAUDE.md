@@ -38,7 +38,7 @@
 | **Frontend Colleague** | Gemini CLI | gemini-3.1-pro-preview | `timeout 180 gemini "@<file>" -s --yolo` |
 | **Backend Intern** | Codex CLI | GPT-5.4 xhigh fast | `CI=true timeout 180 codex exec "Read <file>" --full-auto` |
 | **Senior Fullstack** | Opus Agent | claude-opus-4-6 | Agent tool, `isolation: "worktree"` |
-| **Researcher** | Gemini CLI -G | gemini-3.1-pro-preview | `timeout 300 gemini -G "@<file>" -s` |
+| **Researcher** | Gemini CLI | gemini-3.1-pro-preview | `timeout 300 gemini -p "$(cat <file>)" -m gemini-3.1-pro-preview -y` |
 
 **Harness 映射**: Leader = Planner + Evaluator | Gemini/Codex/Opus = Generator | Researcher = Intelligence
 **核心约束**: Generator 不自审，Leader 不下场，产出通过 git diff 回到 Leader
@@ -82,10 +82,11 @@ cd <worktree> && CI=true GIT_TERMINAL_PROMPT=0 yes | timeout 180 codex exec \
 # Opus Agent (原生 Agent tool — 自带 worktree 隔离)
 # → Agent tool: prompt=<任务>, isolation="worktree", model: opus
 
-# Researcher (Google Search 接地 — 只读，不需要 worktree)
-CI=true yes | timeout 300 gemini -G \
-  "@/Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/research/sprint-<N>-query.md 基于上述问题进行深度调研" \
-  -s 2>&1 | tee /Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/research/sprint-<N>-report.md
+# Researcher (Google Search 通过模型内置 tool 自动调用 — 只读，不需要 worktree)
+CI=true timeout 300 gemini \
+  -p "$(cat /Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/research/sprint-<N>-query.md) 基于上述问题进行深度调研" \
+  -m gemini-3.1-pro-preview -y \
+  2>&1 | tee /Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/research/sprint-<N>-report.md
 ```
 
 ### 并行调度

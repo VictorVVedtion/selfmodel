@@ -72,9 +72,10 @@ Agent tool:
 3. 执行：
 
 ```bash
-CI=true yes | timeout 300 gemini -G \
-  "@/Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/research/sprint-<N>-query.md 基于上述问题进行深度调研" \
-  -s 2>&1 | tee /Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/research/sprint-<N>-report.md
+CI=true timeout 300 gemini \
+  -p "$(cat /Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/research/sprint-<N>-query.md) 基于上述问题进行深度调研" \
+  -m gemini-3.1-pro-preview -y \
+  2>&1 | tee /Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/research/sprint-<N>-report.md
 ```
 
 **三层研究管道**（复杂调研时启用）：
