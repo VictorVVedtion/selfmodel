@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # selfmodel — AI Agent Team 工作流初始化与适配工具
 # Usage: selfmodel <init|adapt|update|version> [options]
-# Zero dependencies. macOS + Linux.
+# Requires: jq (for JSON processing). macOS + Linux.
 set -eo pipefail
 
 SELFMODEL_VERSION="0.2.0"
@@ -28,6 +28,24 @@ confirm() {
     printf "${CYAN}[selfmodel]${NC} %s [Y/n] " "$prompt"
     read -r reply
     [[ -z "$reply" || "$reply" =~ ^[Yy] ]]
+}
+
+# Cross-platform sed -i
+sed_inplace() {
+    if [[ "$(uname)" == "Darwin" ]]; then
+        sed -i '' "$@"
+    else
+        sed -i "$@"
+    fi
+}
+
+# Check required dependencies
+check_deps() {
+    if ! command -v jq &>/dev/null; then
+        err "jq is required but not installed."
+        err "Install: brew install jq (macOS) or apt install jq (Linux)"
+        exit 1
+    fi
 }
 
 # ─── Tech Stack Detection ────────────────────────────────────────────────────
@@ -67,11 +85,15 @@ detect_stack() {
     if [[ -f "$dir/pyproject.toml" || -f "$dir/requirements.txt" || -f "$dir/setup.py" ]]; then
         stacks+=("python")
         has_backend=true
-        [[ -f "$dir/pyproject.toml" ]] && grep -q 'django\|flask\|fastapi' "$dir/pyproject.toml" 2>/dev/null && {
-            grep -q 'django' "$dir/pyproject.toml" 2>/dev/null && frameworks+=("django")
-            grep -q 'flask' "$dir/pyproject.toml" 2>/dev/null && frameworks+=("flask")
-            grep -q 'fastapi' "$dir/pyproject.toml" 2>/dev/null && frameworks+=("fastapi")
-        }
+        # Check both pyproject.toml and requirements.txt for Python frameworks
+        local py_deps=""
+        [[ -f "$dir/pyproject.toml" ]] && py_deps+=$(cat "$dir/pyproject.toml" 2>/dev/null)
+        [[ -f "$dir/requirements.txt" ]] && py_deps+=$(cat "$dir/requirements.txt" 2>/dev/null)
+        if [[ -n "$py_deps" ]]; then
+            echo "$py_deps" | grep -qi 'django' && frameworks+=("django")
+            echo "$py_deps" | grep -qi 'flask' && frameworks+=("flask")
+            echo "$py_deps" | grep -qi 'fastapi' && frameworks+=("fastapi")
+        fi
         grep -q 'pytest' "$dir/pyproject.toml" "$dir/requirements.txt" 2>/dev/null && test_tools+=("pytest")
     fi
     if [[ -f "$dir/go.mod" ]]; then
@@ -82,7 +104,7 @@ detect_stack() {
         stacks+=("rust")
         has_backend=true
     fi
-    if [[ -f "$dir/Package.swift" || -d "$dir/*.xcodeproj" ]] 2>/dev/null; then
+    if [[ -f "$dir/Package.swift" ]] || ls "$dir"/*.xcodeproj &>/dev/null; then
         stacks+=("swift")
         has_frontend=true
         frameworks+=("swiftui")
@@ -377,8 +399,40 @@ cmd_adapt() {
         generate_next_session "$dir"
         generate_playbook "$dir"
     else
-        info ".selfmodel/ exists. Updating team.json with detected stack..."
-        generate_team_json "$dir" "$DETECTED_TYPE" "$DETECTED_HAS_FRONTEND" "$DETECTED_HAS_BACKEND"
+        info ".selfmodel/ exists. Updating detected_stack only (preserving agents/history)..."
+        # Selective update: only detected_stack and protocol_version, NOT agents
+        if [[ -f "$dir/.selfmodel/state/team.json" ]]; then
+            local stacks_json frameworks_json test_tools_json
+            if [[ ${#DETECTED_STACKS[@]} -gt 0 ]]; then
+                stacks_json=$(printf '%s\n' "${DETECTED_STACKS[@]}" | jq -R . | jq -s .)
+            else
+                stacks_json="[]"
+            fi
+            if [[ ${#DETECTED_FRAMEWORKS[@]} -gt 0 ]]; then
+                frameworks_json=$(printf '%s\n' "${DETECTED_FRAMEWORKS[@]}" | jq -R . | jq -s .)
+            else
+                frameworks_json="[]"
+            fi
+            if [[ ${#DETECTED_TEST_TOOLS[@]} -gt 0 ]]; then
+                test_tools_json=$(printf '%s\n' "${DETECTED_TEST_TOOLS[@]}" | jq -R . | jq -s .)
+            else
+                test_tools_json="[]"
+            fi
+            local tmp
+            tmp=$(mktemp)
+            jq --arg ver "$SELFMODEL_VERSION" \
+               --argjson stacks "$stacks_json" \
+               --argjson frameworks "$frameworks_json" \
+               --argjson tests "$test_tools_json" \
+               --arg type "$DETECTED_TYPE" \
+               --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+               '.evolution.protocol_version = $ver |
+                .detected_stack = {"type": $type, "stacks": $stacks, "frameworks": $frameworks, "test_tools": $tests} |
+                .meta.last_modified = $ts |
+                .meta.last_modified_by = "selfmodel-adapt"' \
+               "$dir/.selfmodel/state/team.json" > "$tmp" && mv "$tmp" "$dir/.selfmodel/state/team.json"
+            ok "team.json updated (agents preserved)."
+        fi
     fi
 
     # Handle CLAUDE.md — inject rather than overwrite
@@ -748,7 +802,7 @@ INJECTEOF
 
     if [[ "$mode" == "update" ]]; then
         # Remove old block and inject new
-        sed -i '' '/<!-- selfmodel:start -->/,/<!-- selfmodel:end -->/d' "$dir/CLAUDE.md"
+        sed_inplace '/<!-- selfmodel:start -->/,/<!-- selfmodel:end -->/d' "$dir/CLAUDE.md"
         echo "$selfmodel_block" >> "$dir/CLAUDE.md"
     else
         echo "$selfmodel_block" >> "$dir/CLAUDE.md"
@@ -794,9 +848,9 @@ main() {
     shift || true
 
     case "$cmd" in
-        init)    cmd_init "$@" ;;
-        adapt)   cmd_adapt "$@" ;;
-        update)  cmd_update "$@" ;;
+        init)    check_deps; cmd_init "$@" ;;
+        adapt)   check_deps; cmd_adapt "$@" ;;
+        update)  check_deps; cmd_update "$@" ;;
         version) cmd_version ;;
         -v)      cmd_version ;;
         --version) cmd_version ;;

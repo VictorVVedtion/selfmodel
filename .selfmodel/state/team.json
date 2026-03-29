@@ -1,8 +1,47 @@
 {
   "current_sprint": 0,
-  "session_count": 0,
-  "created": "2026-03-29T01:16:07Z",
-  "agents": {"leader": {"status": "idle", "role": "leader_evaluator"}, "researcher": {"status": "idle", "role": "researcher", "config": {"engine": "gemini-cli", "model": "gemini-3.1-pro-preview", "timeout": 300, "requires_worktree": false}}, "opus": {"status": "idle", "role": "senior_fullstack", "sprints_completed": 0, "avg_score": 0}},
+  "session_count": 1,
+  "created": "2026-03-28T00:00:00Z",
+  "agents": {
+    "gemini": {
+      "status": "idle",
+      "role": "frontend_colleague",
+      "sprints_completed": 0,
+      "avg_score": 0,
+      "last_sprint": null,
+      "last_score": null
+    },
+    "codex": {
+      "status": "idle",
+      "role": "backend_intern",
+      "sprints_completed": 0,
+      "avg_score": 0,
+      "last_sprint": null,
+      "last_score": null
+    },
+    "opus": {
+      "status": "idle",
+      "role": "senior_fullstack",
+      "sprints_completed": 0,
+      "avg_score": 0,
+      "last_sprint": null,
+      "last_score": null
+    },
+    "researcher": {
+      "status": "idle",
+      "role": "researcher",
+      "sprints_completed": 0,
+      "avg_score": 0,
+      "last_sprint": null,
+      "last_score": null,
+      "config": {
+        "engine": "gemini-cli",
+        "model": "gemini-3.1-pro-preview",
+        "timeout": 300,
+        "requires_worktree": false
+      }
+    }
+  },
   "evolution": {
     "last_review_sprint": 0,
     "protocol_version": "0.2.0",
@@ -18,7 +57,7 @@
   "worktrees_active": [],
   "meta": {
     "state_version": 1,
-    "last_modified": "2026-03-29T01:16:07Z",
-    "last_modified_by": "selfmodel-init"
+    "last_modified": "2026-03-29T01:30:00Z",
+    "last_modified_by": "manual-restore"
   }
 }
