@@ -52,7 +52,7 @@ Leader 写入 `.selfmodel/inbox/e2e/sprint-<N>.md`：
 - Contract: <absolute path to sprint contract>
 
 ## Depth
-auto | quick | standard | deep
+quick | standard | deep | auto
 
 ## Notes
 <可选：Leader 想额外强调的验证点>

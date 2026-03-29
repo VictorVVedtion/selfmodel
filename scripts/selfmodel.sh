@@ -152,7 +152,7 @@ recommend_team() {
     local agents='"leader": {"status": "idle", "role": "leader_orchestrator"}'
     agents+=', "researcher": {"status": "idle", "role": "researcher", "config": {"engine": "gemini-cli", "model": "gemini-3.1-pro-preview", "timeout": 300, "requires_worktree": false}}'
     agents+=', "evaluator": {"status": "idle", "role": "independent_evaluator", "evaluations_completed": 0, "avg_score_given": 0, "channel": "opus-agent", "fallback_channel": "gemini", "config": {"timeout": 120, "requires_worktree": false, "skeptical_prompt": true}}'
-    agents+=', "e2e": {"status": "idle", "role": "e2e_verifier", "verifications_completed": 0, "pass_rate": 0, "last_sprint": null, "config": {"engine": "opus-agent", "timeout": 300, "requires_worktree": true, "fallback_engine": "gemini-cli"}}'
+    agents+=', "e2e": {"status": "idle", "role": "e2e_verifier", "verifications_completed": 0, "pass_rate": 0, "last_sprint": null, "config": {"engine": "opus-agent", "timeout": 300, "requires_worktree": true, "fallback_engine": "gemini-cli", "protocol_version": "2.0"}}'
 
     case "$type" in
         fullstack)

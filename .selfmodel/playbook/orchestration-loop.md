@@ -98,7 +98,7 @@ LOOP:
             Write minimal dispatch file → inbox/e2e/sprint-<N>.md
             (only: worktree path + contract path + depth hint)
             Dispatch E2E Agent v2 (per e2e-protocol-v2.md)
-            Agent auto: read contract → read diff → probe env → generate scenarios → execute → report
+            Agent auto: read contract → parse ACs into atomic verifications → probe env → execute atoms → report
      c. Wait for Evaluator + E2E Agent (if dispatched) to complete
      d. Parse Evaluator JSON verdict
      e. Parse E2E JSON verdict (if dispatched)
@@ -109,7 +109,7 @@ LOOP:
         - Evaluator ACCEPT + E2E PASS/undispatched → final ACCEPT
         - Evaluator ACCEPT + E2E PASS + Blocker regression → final REVISE
         - Evaluator REVISE + E2E PASS/undispatched → final REVISE
-        - Evaluator REVISE + E2E FAIL → final REVISE (merge both must_fix + E2E blocking_failures)
+        - Evaluator REVISE + E2E FAIL → final REVISE (merge both must_fix + E2E blocking_failures, see quality-gates.md Step 4.5)
         - FLAKY scenarios do not affect verdict (recorded in flaky_report)
 
   7. ACT on each verdict

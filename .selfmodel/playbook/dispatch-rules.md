@@ -117,7 +117,7 @@ Agent tool:
     CORE PRINCIPLE: The atom of verification is the Acceptance Criterion.
     Parse every AC from the contract into atomic verifications.
     Each AC = one command + one expected result + one evidence.
-    Also verify implicit ACs (files exist, build passes, tests pass).
+    Also verify implicit ACs (files exist, build passes, tests pass, no vulns).
     Workflow: UNDERSTAND → PROBE → DECOMPOSE → SETUP → EXECUTE → RETRY → TEARDOWN → REPORT
     Constraints: no code modification, no global installs, no prod APIs, no git push.
     Save artifacts to: .selfmodel/artifacts/sprint-<N>/
@@ -188,7 +188,7 @@ Layer 3 — 交叉验证:
 
 ---
 
-## 三层静默执行
+## 两层静默执行
 
 | Layer | 机制 | 作用 |
 |---|---|---|

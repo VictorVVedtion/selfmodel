@@ -126,14 +126,14 @@ Evaluator 返回 JSON verdict（schema 见 evaluator-prompt.md）。
 
 如果当前 Sprint 派发了 E2E Agent v2，在 Evaluator verdict 解析后执行合并：
 
-1. 解析 E2E Verdict JSON v2（含分层结果 + regression + flaky）
+1. 解析 E2E Verdict JSON v2（含原子 AC 结果 + regression + flaky）
 2. 按以下规则合并 Evaluator 与 E2E 结果：
 
 | Evaluator | E2E | Regression | 最终 | 理由 |
 |-----------|-----|------------|------|------|
 | ACCEPT | PASS | None/Warning | ACCEPT | 完美/非关键回归 |
 | ACCEPT | PASS | Blocker | REVISE | 有阻塞性回归（测试减少/coverage 骤降） |
-| ACCEPT | FAIL | - | REVISE | 看着好但跑不起来，blocking_failures 加入 must_fix |
+| ACCEPT | FAIL | - | REVISE | AC 未满足，blocking_failures 加入 must_fix |
 | ACCEPT | 未派发 | - | ACCEPT | 不需要 E2E |
 | REVISE | PASS/FAIL | - | REVISE | 合并 must_fix + blocking_failures |
 | REJECT | 任何 | - | REJECT | 代码质量太差 |
