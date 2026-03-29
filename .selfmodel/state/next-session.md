@@ -1,12 +1,13 @@
 # Next Session Handoff
 
 ## 状态
-项目初始化完成。目录结构、状态文件、playbook 模块、CLAUDE.md 已就位。尚未执行任何 Sprint。
+项目初始化完成 + Researcher 角色已就位。5 角色团队完整。尚未执行任何 Sprint。
 
 ## 下一步
 1. **决定产品方向** — selfmodel 要构建什么具体产品？
 2. **创建 Sprint 1 合约** — 选择一个小任务，填写 sprint-template.md
 3. **验证端到端通路** — 创建 worktree → 写 inbox 任务 → 调用 agent → 审查 diff → merge
+4. **验证 Researcher 通路** — 用 Gemini -G 做一次 Type A 快速调研，确认搜索接地可用
 
 ## Blockers
 无
@@ -21,6 +22,8 @@
 - 三层静默执行 — yes | CI=true timeout，杜绝交互死锁
 - 小批量 — 每个 agent 任务 30-60 秒完成
 - 效率至上 — 能并行就并行，最大化 agent 利用率
+- **Researcher 角色** — Gemini CLI -G 作为专职研究 agent，三层搜索管道（广度→深度→验证），不需要 worktree，只读操作
+- **研究前置** — 未知领域先研究再实现，研究报告输入 Leader 决策
 
 ## Active Worktrees
 无

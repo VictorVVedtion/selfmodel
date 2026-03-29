@@ -26,6 +26,21 @@
       "avg_score": 0,
       "last_sprint": null,
       "last_score": null
+    },
+    "researcher": {
+      "status": "idle",
+      "role": "researcher",
+      "sprints_completed": 0,
+      "avg_score": 0,
+      "last_sprint": null,
+      "last_score": null,
+      "config": {
+        "engine": "gemini-cli-grounded",
+        "model": "gemini-3.1-pro-preview",
+        "timeout": 300,
+        "layers": ["gemini-g", "notebooklm", "context7", "webfetch", "chrome"],
+        "requires_worktree": false
+      }
     }
   },
   "evolution": {

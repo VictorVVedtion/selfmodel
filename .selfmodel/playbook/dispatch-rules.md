@@ -12,8 +12,12 @@
 | 单文件 backend / utility / data transform / function / fix / 工具函数 | **Codex** | 快速、聚焦、解耦，适合独立文件作业 |
 | 多文件 refactor / system integration / complex logic / 跨模块 / 重构 | **Opus Agent** | 深度推理 + 百万 token 上下文 |
 | Architecture / spec / review / arbitration / 架构决策 / 仲裁 | **Leader** | 编排权威，不可委托 |
+| 调研 / research / 选型 / 对比 / best practice / 怎么做 / 最佳方案 | **Researcher** | Google Search 接地，搜索深度和实时性最强 |
+| 技术选型 / 库对比 / 方案评估 | **Researcher → Leader** | 先搜再判，研究报告输入 Leader 决策 |
 
-**路由冲突优先级**: Leader > Opus Agent > Gemini > Codex
+**路由冲突优先级**: Leader > Researcher > Opus Agent > Gemini > Codex
+**研究前置**: 涉及未知领域的实现任务，先派 Researcher 再派 Generator
+**研究 vs 实现**: 任务同时匹配研究和实现信号时，Researcher 优先（先搜再做）
 **判断困难时**: 默认路由到 Opus Agent（安全选择，能力最全面）。
 
 ---
@@ -61,11 +65,40 @@ Agent tool:
   model: opus
 ```
 
+### Researcher（Google Search 接地 — 只读）
+
+1. Leader 将研究问题写入：`.selfmodel/inbox/research/sprint-<N>-query.md`
+2. **不需要 worktree**（只读操作，不修改代码）
+3. 执行：
+
+```bash
+CI=true yes | timeout 300 gemini -G \
+  "@/Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/research/sprint-<N>-query.md 基于上述问题进行深度调研" \
+  -s 2>&1 | tee /Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/research/sprint-<N>-report.md
+```
+
+**三层研究管道**（复杂调研时启用）：
+
+```
+Layer 1 — 广度搜索（并行）:
+├── Gemini -G         → Google Search 实时接地回答
+├── NotebookLM        → research_start 多源深度综合（需认证）
+└── context7 MCP      → 库/框架精确文档（技术调研时）
+
+Layer 2 — 深度挖掘（按需）:
+├── WebFetch          → 抓取 Layer 1 关键 URL 全文
+└── Chrome MCP        → 需要交互的页面
+
+Layer 3 — 交叉验证:
+└── Leader            → 消除矛盾，综合结论，输出最终报告
+```
+
 ### 并行调度
 
 无依赖的任务必须并行调度：
 - 多个 Agent tool 调用放在同一个 message 中
 - Gemini/Codex 用 `run_in_background: true` 后台执行
+- **Researcher 可与 Generator 并行**（研究和实现无依赖时）
 - 等全部完成后统一审查
 
 ---
@@ -102,14 +135,25 @@ Agent tool:
 | 单文件编辑 / 简单修复 | 60s | 快速操作 |
 | 组件创建 / 中等复杂度 | 120s | 大部分 Sprint 标准 |
 | 多文件实现 / 复杂逻辑 | 180s | 单次最大值 |
+| **Researcher 调研** | **300s** | **搜索+综合需要时间** |
 | npm install / build | 300s | 网络延迟不可控 |
 
 ---
 
 ## Backpressure 协议
 
+### Generator（Gemini/Codex/Opus）
+
 1. **第一次超时** → 相同 timeout 重试一次
 2. **第二次超时** → 拆分为更小子 Sprint，每个 ≤60s
 3. **第三次超时** → 升级到 Leader 手动介入，记录到 lessons-learned.md
 
 失败时保留 worktree 不清理，便于诊断。
+
+### Researcher
+
+1. **第一次超时/失败** → 相同 timeout 重试一次
+2. **第二次超时/失败** → 降级通道：Gemini -G → Leader 用 WebSearch + WebFetch 自研
+3. **第三次失败** → Leader 用 Chrome MCP 手动搜索 → 记录到 lessons-learned.md
+
+降级链: `Gemini -G` → `WebSearch + WebFetch` → `Chrome MCP` → `Leader 自研`
