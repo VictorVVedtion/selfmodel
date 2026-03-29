@@ -38,9 +38,11 @@
 | **Frontend Colleague** | Gemini CLI | gemini-3.1-pro-preview | `timeout 180 gemini "@<file>" -s --yolo` |
 | **Backend Intern** | Codex CLI | GPT-5.4 xhigh fast | `CI=true timeout 180 codex exec "Read <file>" --full-auto` |
 | **Senior Fullstack** | Opus Agent | claude-opus-4-6 | Agent tool, `isolation: "worktree"` |
+| **Researcher** | Gemini CLI -G | gemini-3.1-pro-preview | `timeout 300 gemini -G "@<file>" -s` |
 
-**Harness 映射**: Leader = Planner + Evaluator | Gemini/Codex/Opus = Generator
+**Harness 映射**: Leader = Planner + Evaluator | Gemini/Codex/Opus = Generator | Researcher = Intelligence
 **核心约束**: Generator 不自审，Leader 不下场，产出通过 git diff 回到 Leader
+**Researcher 约束**: 只读操作，不产出代码，不需要 worktree，产出研究报告供 Leader 决策
 
 ## Execution（执行协议）
 
@@ -79,6 +81,11 @@ cd <worktree> && CI=true GIT_TERMINAL_PROMPT=0 yes | timeout 180 codex exec \
 
 # Opus Agent (原生 Agent tool — 自带 worktree 隔离)
 # → Agent tool: prompt=<任务>, isolation="worktree", model: opus
+
+# Researcher (Google Search 接地 — 只读，不需要 worktree)
+CI=true timeout 300 gemini -G \
+  "@/Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/research/sprint-<N>-query.md 基于上述问题进行深度调研" \
+  -s
 ```
 
 ### 并行调度
@@ -137,6 +144,7 @@ cd <worktree> && CI=true GIT_TERMINAL_PROMPT=0 yes | timeout 180 codex exec \
 | 场景 | 读取文件 |
 |------|----------|
 | 调度决策 + CLI 模板 | `.selfmodel/playbook/dispatch-rules.md` |
+| 研究调度 + 管道协议 | `.selfmodel/playbook/research-protocol.md` |
 | 质量审查 + 评分 | `.selfmodel/playbook/quality-gates.md` |
 | 创建 Sprint 合约 | `.selfmodel/playbook/sprint-template.md` |
 | 经验回顾 + 进化 | `.selfmodel/playbook/lessons-learned.md` |
@@ -206,6 +214,7 @@ selfmodel/
     ├── inbox/gemini/                  # Leader→Gemini 任务文件
     ├── inbox/codex/                   # Leader→Codex 任务文件
     ├── inbox/opus/                    # Leader→Opus 任务文件
+    ├── inbox/research/                # Leader→Researcher 查询+报告
     ├── state/team.json                # 团队状态
     ├── state/next-session.md          # Session 交接
     ├── state/quality.jsonl            # 质量评分历史
