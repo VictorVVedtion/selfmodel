@@ -28,11 +28,13 @@ Requires: `jq` (`brew install jq` on macOS, `apt install jq` on Linux)
 Inspired by [Anthropic's Harness Design](https://www.anthropic.com/engineering/harness-design-long-running-apps) and [Karpathy's Autoresearch](https://github.com/karpathy/autoresearch).
 
 ```
-                    ┌─────────────────────┐
-                    │   Leader (Opus 4.6)  │
-                    │  Planner + Evaluator │
-                    │   Never implements   │
-                    └──────────┬──────────┘
+                    ┌──────────────────────┐
+                    │  Leader (Opus 4.6)   │
+                    │  Planner +           │
+                    │  Orchestrator        │
+                    │  Never implements    │
+                    │  Never evaluates     │
+                    └──────────┬───────────┘
                                │
          ┌─────────────────────┼─────────────────────┐
          │                     │                     │
@@ -49,16 +51,24 @@ Inspired by [Anthropic's Harness Design](https://www.anthropic.com/engineering/h
                           │
                   ┌───────▼───────┐
                   │  git diff →   │
-                  │  Leader Review│
-                  │  merge/reject │
+                  │  Independent  │
+                  │  Evaluator    │◄── skeptical prompt
+                  │  (isolated)   │    + calibration
+                  └───────┬───────┘
+                          │
+                  ┌───────▼───────┐
+                  │  verdict →    │
+                  │  Leader acts  │
+                  │  mechanically │
                   └───────────────┘
 ```
 
-### Five-Role Team
+### Six-Role Team
 
 | Role | Agent | Model | Responsibility |
 |------|-------|-------|----------------|
-| **Leader / Evaluator** | Claude Opus 4.6 | Current session | Orchestrates, reviews, arbitrates. Never implements. |
+| **Leader / Orchestrator** | Claude Opus 4.6 | Current session | Orchestrates, plans, arbitrates. Never implements. Never evaluates. |
+| **Evaluator** | Opus Agent / Gemini CLI | claude-opus-4-6 / gemini-3.1-pro-preview | Independent quality gate. Skeptical prompt. Isolated context. |
 | **Frontend Colleague** | Gemini CLI | gemini-3.1-pro-preview | UI/UX, components, visual design |
 | **Backend Intern** | Codex CLI | GPT-5.4 xhigh fast | Utilities, single-file modules |
 | **Senior Fullstack** | Opus Agent | claude-opus-4-6 | Complex multi-file, cross-cutting work |
@@ -67,6 +77,8 @@ Inspired by [Anthropic's Harness Design](https://www.anthropic.com/engineering/h
 ### Key Design Decisions
 
 - **Worktree isolation** — Every agent works in a separate git worktree. No shared state pollution. Leader reviews via `git diff`.
+- **Independent evaluation** — Evaluator runs in isolated context with skeptical prompt. Receives only: git diff + sprint contract + calibration. No access to Leader orchestration history.
+- **Orchestration loop** — For large projects (10+ sprints), automated loop reads plan file, dispatches agents, dispatches evaluator, acts on verdicts, checkpoints between sprints, resets between phases.
 - **File buffer communication** — Complex prompts written to `.selfmodel/inbox/` files, referenced via `@` syntax. No CLI argument escaping nightmares.
 - **Three-layer silent execution** — `yes | CI=true timeout 180 <cmd>`. Zero interactive prompts, zero hangs.
 - **Small batches** — Each agent task completes in 30–60 seconds. No API timeout risks.
@@ -99,11 +111,14 @@ selfmodel/
     │   ├── gemini/                    # Frontend tasks
     │   ├── codex/                     # Backend tasks
     │   ├── opus/                      # Fullstack tasks
-    │   └── research/                  # Research queries + reports
+    │   ├── research/                  # Research queries + reports
+    │   └── evaluator/                 # Evaluator eval files
     ├── state/
     │   ├── team.json                  # Team status + metrics + detected stack
     │   ├── next-session.md            # Cross-session handoff
+    │   ├── plan.md                    # Orchestration plan (phases + sprints)
     │   ├── quality.jsonl              # Quality scores (append-only)
+    │   ├── orchestration.log          # Orchestration loop event log
     │   └── evolution.jsonl            # Evolution log
     ├── reviews/                       # Review records
     └── playbook/                      # On-demand loaded rules
@@ -111,6 +126,8 @@ selfmodel/
         ├── quality-gates.md           # 5-dimension scoring rubric
         ├── research-protocol.md       # Researcher types A/B/C + evaluation
         ├── sprint-template.md         # Contract template
+        ├── evaluator-prompt.md        # Independent evaluator protocol
+        ├── orchestration-loop.md      # Automated orchestration loop
         └── lessons-learned.md         # Accumulated wisdom
 ```
 
@@ -122,9 +139,9 @@ selfmodel/
 3. Leader writes task file  → .selfmodel/inbox/<agent>/sprint-N.md
 4. Create worktree          → git worktree add sprint-N-<agent>
 5. Agent executes           → isolated, non-interactive, timeout-protected
-6. Leader reviews diff      → git diff main...sprint/N-<agent>
-7. Accept → merge           → contract archived, worktree cleaned
-   Reject → feedback        → agent continues in same worktree
+6. Leader quick scan        → 10 auto-reject triggers on git diff
+7. Evaluator reviews        → independent evaluator (skeptical prompt, isolated context)
+8. Leader acts on verdict   → ≥7.0 merge | 5.0-6.9 revise | <5.0 reject & redo
 ```
 
 ## Hooks Enforcement

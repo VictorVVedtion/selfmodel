@@ -40,6 +40,20 @@
         "timeout": 300,
         "requires_worktree": false
       }
+    },
+    "evaluator": {
+      "status": "idle",
+      "role": "independent_evaluator",
+      "evaluations_completed": 0,
+      "avg_score_given": 0,
+      "last_sprint": null,
+      "channel": "opus-agent",
+      "fallback_channel": "gemini",
+      "config": {
+        "timeout": 120,
+        "requires_worktree": false,
+        "skeptical_prompt": true
+      }
     }
   },
   "evolution": {

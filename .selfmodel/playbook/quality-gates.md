@@ -65,34 +65,52 @@
 
 ## Review Protocol
 
-### Step 1: Quick Scan（30 秒）
+### Step 1: Quick Scan（30 秒，Leader 执行）
 
 对 `git diff main...sprint/<N>-<agent>` 逐条检查 10 项自动拒绝触发器。
-任一触发 → 立即 Grade F，无需继续评分。
+任一触发 → 立即 Grade F，跳过 Evaluator（节省调用成本）。
 
-### Step 2: 交叉验证
+### Step 2: 准备 Evaluator 输入（Leader 执行）
 
-将 diff 路由到与实现者不同的 Agent 独立审查：
+构建 eval 输入文件 `.selfmodel/inbox/evaluator/sprint-<N>-eval.md`：
+1. 复制合约中的验收标准和 Scoring Rubric
+2. 附加完整 git diff 输出（遵循 evaluator-prompt.md 中的 Diff Size Limits）
+3. 附加校准锚点（满分 8.9 和不及格 4.1 的评分表，来自本文件 Calibration Examples）
+4. 写入文件
 
-| 实现者 | 审查者 | 方式 |
+详细输入格式参见 `playbook/evaluator-prompt.md` Input Protocol 章节。
+
+### Step 3: Dispatch Independent Evaluator
+
+按 `evaluator-prompt.md` 的调用协议分派独立 Evaluator：
+
+| 通道 | 方式 | 适用场景 |
 |---|---|---|
-| Codex | Gemini | `gemini "@<diff-file> 审查此代码变更" -s --yolo` |
-| Gemini | Leader 直接 | 或路由到 Codex |
-| Opus | Gemini | `gemini "@<diff-file> 审查此代码变更" -s --yolo` |
+| Opus Agent（主通道） | Agent tool, read-only, skeptical prompt | 默认，校准稳定 |
+| Gemini CLI（备用通道） | `gemini -p "$(cat eval-file)" -y` | 怀疑模型偏见时，或 Opus 超时 |
+| Leader self-fallback | Leader 自评，标注降级 | 两通道均失败 |
 
-### Step 3: Leader 深度审查
+Evaluator 返回 JSON verdict（schema 见 evaluator-prompt.md）。
 
-读完整 diff，结合审查者报告，5 维度逐一打分（0-10）。
+### Step 4: 解析 Verdict（Leader 执行）
 
-### Step 4: 判定
+1. 验证 JSON 格式正确
+2. 验证 `weighted` 与各维度分数的加权计算一致（容差 ±0.1）
+3. 检查 `auto_reject_triggered` 与 `auto_reject_reasons` 的一致性
+4. JSON 格式错误 → 从 Evaluator 文本输出提取关键信息，Leader 补全结构
+
+### Step 5: 判定（Leader 机械执行）
 
 加权平均: `weighted = func×0.30 + quality×0.25 + taste×0.20 + complete×0.15 + original×0.10`
 
 | 加权平均 | 判定 | 后续 |
 |---|---|---|
 | ≥ 7.0 | **ACCEPT** | merge 到 main，归档合约 |
-| 5.0 ~ 6.9 | **REVISE** | 写 feedback，agent 在原 worktree 修改 |
+| 5.0 ~ 6.9 | **REVISE** | 写 feedback（`must_fix` from verdict），agent 在原 worktree 修改 |
 | < 5.0 | **REJECT** | 丢弃分支，从头重做 |
+
+**关键原则**: Leader 机械执行 Evaluator verdict，不重新打分。
+**Override**: Leader 可覆盖 verdict 的唯一条件：有明确证据证明 Evaluator 误判。覆盖必须在 review 文件中记录理由。
 
 ---
 
@@ -102,6 +120,10 @@ REVISE 或 REJECT 时写入 `.selfmodel/reviews/sprint-<N>-review.md`：
 
 ```
 ## Sprint <N> Feedback
+### Evaluator
+- Channel: opus-agent | gemini | self-fallback
+- Raw Verdict: .selfmodel/reviews/sprint-<N>-verdict.json
+- Leader Override: None | <理由>
 ### Grade: <A/B/C/D/F>
 ### Scores
 | Dimension | Score | Notes |
@@ -203,6 +225,15 @@ REVISE 或 REJECT 时写入 `.selfmodel/reviews/sprint-<N>-review.md`：
 2. 在 `lessons-learned.md` 记录膨胀事件和修正措施
 3. 下次评审强制引用校准样本对标
 
+### 跨 Evaluator 一致性检测
+
+**触发条件**: 同一 Sprint 被不同 Evaluator 通道（Opus vs Gemini）评审，分数差异 > 1.5
+
+**处置**:
+1. 取两个评分的较低值作为最终分数
+2. 在 `lessons-learned.md` 记录跨模型分歧
+3. 分析分歧维度，调整该维度的 Evaluator prompt 校准文本
+
 ### 评分固化检测
 
 **触发条件**: 同一维度连续 3 次给出完全相同的分数
@@ -224,5 +255,5 @@ REVISE 或 REJECT 时写入 `.selfmodel/reviews/sprint-<N>-review.md`：
 
 每次审查追加到 `.selfmodel/state/quality.jsonl`：
 ```json
-{"sprint":1,"agent":"gemini","scores":{"func":8,"quality":7,"taste":6,"complete":9,"original":7},"weighted":7.4,"verdict":"accept","reviewer":"codex","ts":"2026-03-28T12:00:00Z"}
+{"sprint":1,"agent":"gemini","evaluator":"opus-agent","scores":{"func":8,"quality":7,"taste":6,"complete":9,"original":7},"weighted":7.4,"verdict":"accept","leader_override":null,"ts":"2026-03-28T12:00:00Z"}
 ```

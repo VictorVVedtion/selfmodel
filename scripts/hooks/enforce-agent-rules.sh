@@ -75,10 +75,10 @@ fi
 
 # ── Inbox 缓冲检查 ──
 if [[ "${HAS_GEMINI}" == "true" ]]; then
-    # Gemini CLI 有两种用途：Frontend (inbox/gemini/) 和 Researcher (inbox/research/)
+    # Gemini CLI 有三种用途：Frontend (inbox/gemini/)、Researcher (inbox/research/)、Evaluator (inbox/evaluator/)
     # 任一 inbox 有 .md 文件即放行
     GEMINI_INBOX_COUNT=0
-    for inbox_dir in ".selfmodel/inbox/gemini" ".selfmodel/inbox/research"; do
+    for inbox_dir in ".selfmodel/inbox/gemini" ".selfmodel/inbox/research" ".selfmodel/inbox/evaluator"; do
         if [[ -d "${inbox_dir}" ]]; then
             while IFS= read -r -d '' _; do
                 GEMINI_INBOX_COUNT=$((GEMINI_INBOX_COUNT + 1))

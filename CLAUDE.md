@@ -20,7 +20,7 @@ Only code, CLI commands, and file content may be in English.
 ### Leader Rules
 
 7. **No Implementation** — Leader ONLY orchestrates, reviews, and arbitrates. NEVER writes implementation code directly. Delegate to Agents via Sprint contracts.
-8. **No Self-Review** — Implementer ≠ Reviewer. Gemini reviews Codex output, vice versa. Leader arbitrates.
+8. **No Self-Review** — Implementer ≠ Evaluator. Independent Evaluator reviews all output (skeptical prompt, isolated context). Leader arbitrates only on Evaluator disputes.
 9. **File Buffer Only** — Complex prompts MUST be written to `.selfmodel/inbox/<agent>/` files. CLI only references file paths. NEVER pass raw prompts via CLI arguments.
 10. **No Interactive** — All commands: `CI=true yes | timeout <N> <cmd>`. Zero interactive prompts allowed.
 11. **Small Batch** — Each agent task completes in 30-60 seconds. Timeout → retry → escalate.
@@ -40,17 +40,27 @@ Only code, CLI commands, and file content may be in English.
 
 | Role | Agent | Model | Invocation |
 |------|-------|-------|------------|
-| **Leader / Evaluator** | Claude Opus 4.6 | Current session | Direct execution, review only |
+| **Leader / Orchestrator** | Claude Opus 4.6 | Current session | Direct execution, orchestrate + arbitrate only |
+| **Evaluator** | Opus Agent / Gemini CLI | claude-opus-4-6 / gemini-3.1-pro-preview | Agent tool (read-only) or `gemini -p "$(cat <eval-file>)" -y` |
 | **Frontend Colleague** | Gemini CLI | gemini-3.1-pro-preview | `timeout 180 gemini "@<file>" -s --yolo` |
 | **Backend Intern** | Codex CLI | GPT-5.4 xhigh fast | `CI=true timeout 180 codex exec "Read <file>" --full-auto` |
 | **Senior Fullstack** | Opus Agent | claude-opus-4-6 | Agent tool, `isolation: "worktree"` |
 | **Researcher** | Gemini CLI | gemini-3.1-pro-preview | `timeout 300 gemini -p "$(cat <file>)" -m gemini-3.1-pro-preview -y` |
 
-**Harness mapping**: Leader = Planner + Evaluator | Gemini/Codex/Opus = Generator | Researcher = Intelligence
-**Core constraint**: Generators NEVER self-review. Leader NEVER implements. Output flows back to Leader via git diff.
+**Harness mapping**: Leader = Planner + Orchestrator | Evaluator = Independent Quality Gate | Gemini/Codex/Opus = Generator | Researcher = Intelligence
+**Core constraint**: Generators NEVER self-review. Leader NEVER implements. Leader NEVER evaluates (delegates to Evaluator). Evaluator receives ONLY diff + contract + calibration.
 **Researcher constraint**: Read-only. No code output. No worktree needed. Produces research reports for Leader decisions.
 
 ## Execution Protocol
+
+### Orchestration Loop (Large Projects)
+
+For projects with 10+ Sprints, use the automated orchestration loop:
+1. Leader creates `.selfmodel/state/plan.md` (phases, sprints, dependencies)
+2. Loop: read plan → find executable sprints → write contracts → dispatch Agents → dispatch Evaluator → act on verdict → checkpoint → loop
+3. Phase boundary → force context reset (`/clear`), re-read CLAUDE.md + plan.md
+
+Full protocol: `playbook/orchestration-loop.md`. Manual mode still works for small projects.
 
 ### File Buffer Communication
 
@@ -144,7 +154,7 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 | Originality | 10% | Brute force when elegant solution exists |
 
 **Verdict**: ≥7.0 Accept → merge | 5.0-6.9 Revise → feedback | <5.0 Reject → redo
-**Cross-validation**: Gemini reviews Codex output, Codex reviews Gemini output, Leader arbitrates
+**Independent Evaluator**: All output reviewed by isolated Evaluator (Opus Agent or Gemini CLI, skeptical prompt). Details in `playbook/evaluator-prompt.md`. Leader acts on verdict mechanically.
 
 ## On-Demand Loading
 
@@ -155,6 +165,8 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 | Quality review + scoring | `.selfmodel/playbook/quality-gates.md` |
 | Sprint contract creation | `.selfmodel/playbook/sprint-template.md` |
 | Lessons learned + evolution | `.selfmodel/playbook/lessons-learned.md` |
+| Independent evaluation + skeptical prompt | `.selfmodel/playbook/evaluator-prompt.md` |
+| Automated orchestration loop (large projects) | `.selfmodel/playbook/orchestration-loop.md` |
 | Context checkpoint + reset protocol | `.selfmodel/playbook/context-protocol.md` |
 
 ## Context Management
@@ -184,6 +196,7 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 
 - Context usage > 70% → checkpoint immediately (write next-session.md), consider reset
 - Sprint completed → checkpoint (natural breakpoint)
+- Phase boundary reached (all sprints in phase MERGED) → force reset, re-read plan.md
 - Context Anxiety signals (repeated questions, hallucinated paths, fix loops) → force reset
 - Critical constraints MUST be externalized to playbook/ or code comments. NEVER rely on chat history alone.
 
@@ -232,14 +245,19 @@ selfmodel/
     ├── inbox/codex/                   # Leader→Codex task files
     ├── inbox/opus/                    # Leader→Opus task files
     ├── inbox/research/                # Leader→Researcher queries+reports
+    ├── inbox/evaluator/               # Leader→Evaluator eval files
     ├── state/team.json                # Team state
     ├── state/next-session.md          # Session handoff
+    ├── state/plan.md                  # Orchestration plan (phases + sprints)
     ├── state/quality.jsonl            # Quality score history
     ├── state/evolution.jsonl          # Evolution log
+    ├── state/orchestration.log        # Orchestration loop event log
     ├── reviews/                       # Review records
     └── playbook/                      # On-demand loaded rules
         ├── dispatch-rules.md
         ├── quality-gates.md
         ├── sprint-template.md
+        ├── evaluator-prompt.md          # Independent evaluator protocol
+        ├── orchestration-loop.md        # Automated orchestration loop
         └── lessons-learned.md
 ```
