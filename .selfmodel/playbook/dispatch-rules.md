@@ -12,10 +12,12 @@
 | 单文件 backend / utility / data transform / function / fix / 工具函数 | **Codex** | 快速、聚焦、解耦，适合独立文件作业 |
 | 多文件 refactor / system integration / complex logic / 跨模块 / 重构 | **Opus Agent** | 深度推理 + 百万 token 上下文 |
 | Architecture / spec / review / arbitration / 架构决策 / 仲裁 | **Leader** | 编排权威，不可委托 |
+| Sprint 交付审查 / 质量评估 / code review / 评审 | **Evaluator** | 独立上下文，怀疑论提示词，防止自评偏见 |
 | 调研 / research / 选型 / 对比 / best practice / 怎么做 / 最佳方案 | **Researcher** | Google Search 接地，搜索深度和实时性最强 |
 | 技术选型 / 库对比 / 方案评估 | **Researcher → Leader** | 先搜再判，研究报告输入 Leader 决策 |
 
-**路由冲突优先级**: Leader > Researcher > Opus Agent > Gemini > Codex
+**路由冲突优先级**: Leader > Evaluator > Researcher > Opus Agent > Gemini > Codex
+**Evaluator 约束**: Evaluator 只做评审，不做实现。只有 Leader 可以 dispatch Evaluator。
 **研究前置**: 涉及未知领域的实现任务，先派 Researcher 再派 Generator
 **研究 vs 实现**: 任务同时匹配研究和实现信号时，Researcher 优先（先搜再做）
 **判断困难时**: 默认路由到 Opus Agent（安全选择，能力最全面）。
@@ -63,6 +65,33 @@ Agent tool:
     完成后在 worktree 根目录创建 DONE.md 记录交付物清单。
   isolation: "worktree"
   model: opus
+```
+
+### Evaluator（独立质量审查 — 只读）
+
+1. Leader 构建 eval 输入：`.selfmodel/inbox/evaluator/sprint-<N>-eval.md`
+   （格式见 `playbook/evaluator-prompt.md` Input Protocol）
+2. **不需要 worktree**（只读评审）
+
+**Opus Agent 通道（主通道）**:
+
+```
+Agent tool:
+  prompt: |
+    You are an independent code auditor. Read the evaluation file below and execute
+    the review protocol exactly as specified. Output ONLY valid JSON matching the schema.
+    Evaluation file: /Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/evaluator/sprint-<N>-eval.md
+  isolation: "worktree"
+  model: opus
+```
+
+**Gemini 通道（备用）**:
+
+```bash
+CI=true timeout 120 gemini \
+  -p "$(cat /Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/evaluator/sprint-<N>-eval.md) Execute the review protocol. Output ONLY valid JSON." \
+  -m gemini-3.1-pro-preview -y \
+  2>&1 | tee /Users/vvedition/Desktop/selfmodel/.selfmodel/reviews/sprint-<N>-verdict.json
 ```
 
 ### Researcher（Google Search 接地 — 只读）
@@ -133,6 +162,7 @@ Layer 3 — 交叉验证:
 
 | 任务类型 | Timeout | 说明 |
 |---|---|---|
+| **Evaluator 评审** | **120s** | **只读分析，不做实现** |
 | 单文件编辑 / 简单修复 | 60s | 快速操作 |
 | 组件创建 / 中等复杂度 | 120s | 大部分 Sprint 标准 |
 | 多文件实现 / 复杂逻辑 | 180s | 单次最大值 |
@@ -158,3 +188,9 @@ Layer 3 — 交叉验证:
 3. **第三次失败** → Leader 用 Chrome MCP 手动搜索 → 记录到 lessons-learned.md
 
 降级链: `Gemini -G` → `WebSearch + WebFetch` → `Chrome MCP` → `Leader 自研`
+
+### Evaluator
+
+1. **第一次超时** → 相同通道重试
+2. **第二次超时** → 切换通道（Opus ↔ Gemini）
+3. **两通道均失败** → Leader self-fallback，review 记录标注 `evaluator: self-fallback`
