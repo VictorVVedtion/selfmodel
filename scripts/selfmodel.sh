@@ -730,7 +730,7 @@ cmd_status() {
     # Playbook consistency
     echo "────────────────────────────────────────────────────"
     local playbook_files=("dispatch-rules.md" "quality-gates.md" "sprint-template.md" \
-        "evaluator-prompt.md" "orchestration-loop.md" "research-protocol.md" \
+        "evaluator-prompt.md" "e2e-protocol.md" "orchestration-loop.md" "research-protocol.md" \
         "context-protocol.md" "lessons-learned.md")
     local missing=0
     for f in "${playbook_files[@]}"; do
