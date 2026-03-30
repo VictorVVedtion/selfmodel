@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/hooks/session-start.sh"
+            "command": "bash .selfmodel/hooks/session-start.sh"
           }
         ]
       }
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/hooks/enforce-leader-worktree.sh"
+            "command": "bash .selfmodel/hooks/enforce-leader-worktree.sh"
           }
         ]
       },
@@ -26,7 +26,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/hooks/enforce-agent-rules.sh"
+            "command": "bash .selfmodel/hooks/enforce-agent-rules.sh"
           }
         ]
       }

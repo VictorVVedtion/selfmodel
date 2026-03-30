@@ -1,0 +1,5 @@
+.selfmodel/state/hook-intercepts.log
+.selfmodel/state/orchestration.log
+.selfmodel/artifacts/
+!.selfmodel/state/.gitkeep
+!.selfmodel/artifacts/.gitkeep

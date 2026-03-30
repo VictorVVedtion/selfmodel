@@ -1,0 +1,243 @@
+# Dispatch Rules
+
+任务调度规则。Leader 在分配 Sprint 前必须查阅本文件。
+
+---
+
+## 决策矩阵
+
+| Signal（信号关键词） | Route To | Why |
+|---|---|---|
+| UI / UX / CSS / component / page / animation / layout / 前端 / 界面 / 组件 | **Gemini** | 视觉设计强项，擅长 JSX/TSX/样式系统 |
+| 单文件 backend / utility / data transform / function / fix / 工具函数 | **Codex** | 快速、聚焦、解耦，适合独立文件作业 |
+| 多文件 refactor / system integration / complex logic / 跨模块 / 重构 | **Opus Agent** | 深度推理 + 百万 token 上下文 |
+| Architecture / spec / review / arbitration / 架构决策 / 仲裁 | **Leader** | 编排权威，不可委托 |
+| Sprint 交付审查 / 质量评估 / code review / 评审 | **Evaluator** | 独立上下文，怀疑论提示词，防止自评偏见 |
+| 调研 / research / 选型 / 对比 / best practice / 怎么做 / 最佳方案 | **Researcher** | Google Search 接地，搜索深度和实时性最强 |
+| 技术选型 / 库对比 / 方案评估 | **Researcher → Leader** | 先搜再判，研究报告输入 Leader 决策 |
+| E2E / 运行验证 / 集成测试 / 端到端 | **E2E Agent** | 运行时验证，不做代码修改 |
+
+**路由冲突优先级**: Leader > Evaluator > Researcher > Opus Agent > Gemini > Codex
+**Evaluator 约束**: Evaluator 只做评审，不做实现。只有 Leader 可以 dispatch Evaluator。
+**研究前置**: 涉及未知领域的实现任务，先派 Researcher 再派 Generator
+**研究 vs 实现**: 任务同时匹配研究和实现信号时，Researcher 优先（先搜再做）
+**判断困难时**: 默认路由到 Opus Agent（安全选择，能力最全面）。
+
+---
+
+## CLI 调用模板
+
+### Atomic Commit Workflow（所有 Agent 通用）
+
+Agent 必须遵循 fix → verify → commit 循环。每个可独立验证的变更单独 commit。
+禁止在 worktree 中积累所有变更后一次性 commit。
+Commit message 格式: `sprint-<N>: <concise description of change>`
+
+### Gemini（文件缓冲 + @ 语法）
+
+1. Leader 将完整任务写入：`.selfmodel/inbox/gemini/sprint-<N>.md`
+2. 创建 worktree（见 Worktree 管理）
+3. 在 worktree 内执行：
+
+```bash
+cd <worktree-path> && \
+CI=true GIT_TERMINAL_PROMPT=0 timeout 180 gemini \
+  "@.selfmodel/inbox/gemini/sprint-<N>.md 执行上述任务" \
+  -s --yolo
+```
+
+### Codex（文件缓冲）
+
+1. Leader 将完整任务写入：`.selfmodel/inbox/codex/sprint-<N>.md`
+2. 创建 worktree
+3. 在 worktree 内执行：
+
+```bash
+cd <worktree-path> && \
+CI=true GIT_TERMINAL_PROMPT=0 timeout 180 codex exec \
+  "Read .selfmodel/inbox/codex/sprint-<N>.md and implement exactly as specified. Working directory: $(pwd)" \
+  --full-auto
+```
+
+### Opus Agent（原生 Agent tool — 自带 worktree 隔离）
+
+通过 Claude Code 的 Agent tool 调用，自带 worktree 隔离：
+
+```
+Agent tool:
+  prompt: |
+    你是 Opus Agent，负责 Sprint <N>。
+    任务合约: .selfmodel/contracts/active/sprint-<N>.md
+    请读取合约后严格按照验收标准实现。
+    完成后在 worktree 根目录创建 DONE.md 记录交付物清单。
+  isolation: "worktree"
+  model: opus
+```
+
+### Evaluator（独立质量审查 — 只读）
+
+1. Leader 构建 eval 输入：`.selfmodel/inbox/evaluator/sprint-<N>-eval.md`
+   （格式见 `playbook/evaluator-prompt.md` Input Protocol）
+2. **不需要 worktree**（只读评审）
+
+**Opus Agent 通道（主通道）**:
+
+```
+Agent tool:
+  prompt: |
+    You are an independent code auditor. Read the evaluation file below and execute
+    the review protocol exactly as specified. Output ONLY valid JSON matching the schema.
+    Evaluation file: .selfmodel/inbox/evaluator/sprint-<N>-eval.md
+  isolation: "worktree"
+  model: opus
+```
+
+**Gemini 通道（备用）**:
+
+```bash
+CI=true timeout 120 gemini \
+  -p "$(cat .selfmodel/inbox/evaluator/sprint-<N>-eval.md) Execute the review protocol. Output ONLY valid JSON." \
+  -m gemini-3.1-pro-preview -y \
+  2>&1 | tee .selfmodel/reviews/sprint-<N>-verdict.json
+```
+
+### E2E Agent v2（智能验证引擎 — 只读）
+
+1. Leader 写入最小化 dispatch 文件：`.selfmodel/inbox/e2e/sprint-<N>.md`（仅 worktree 路径 + 合约路径 + depth hint）
+2. **与 Evaluator 并行派发**（步骤 6 中同时触发）
+3. Agent 自主：读合约 → 解析 AC 为原子验证 → 探测环境 → 逐条执行 → 逐条举证 → 报告
+
+**Opus Agent 通道（主通道 — claude-opus-4-6）**:
+
+```
+Agent tool:
+  prompt: |
+    You are the E2E Verification Agent v2 (Opus 4.6).
+    Mission: verify delivered code works at runtime. Do NOT modify code.
+    CORE PRINCIPLE: The atom of verification is the Acceptance Criterion.
+    Parse every AC from the contract into atomic verifications.
+    Each AC = one command + one expected result + one evidence.
+    Also verify implicit ACs (files exist, build passes, tests pass, no vulns).
+    Workflow: UNDERSTAND → PROBE → DECOMPOSE → SETUP → EXECUTE → RETRY → TEARDOWN → REPORT
+    Constraints: no code modification, no global installs, no prod APIs, no git push.
+    Save artifacts to: .selfmodel/artifacts/sprint-<N>/
+    Verification file: .selfmodel/inbox/e2e/sprint-<N>.md
+    Output ONLY valid JSON matching E2E Verdict v2 schema.
+  isolation: "worktree"
+  model: opus
+```
+
+**Gemini CLI 通道（降级，仅隐式 AC）**:
+
+```bash
+cd <worktree-path> && \
+CI=true GIT_TERMINAL_PROMPT=0 timeout 120 gemini \
+  "@.selfmodel/inbox/e2e/sprint-<N>.md Verify only implicit ACs (files exist, build passes). Output JSON." \
+  -s --yolo
+```
+
+### Researcher（Google Search 接地 — 只读）
+
+1. Leader 将研究问题写入：`.selfmodel/inbox/research/sprint-<N>-query.md`
+2. **不需要 worktree**（只读操作，不修改代码）
+3. 执行：
+
+```bash
+CI=true timeout 300 gemini \
+  -p "$(cat .selfmodel/inbox/research/sprint-<N>-query.md) 基于上述问题进行深度调研" \
+  -m gemini-3.1-pro-preview -y \
+  2>&1 | tee .selfmodel/inbox/research/sprint-<N>-report.md
+```
+
+**三层研究管道**（复杂调研时启用）：
+
+```
+Layer 1 — 广度搜索（并行）:
+├── Gemini -G         → Google Search 实时接地回答
+├── NotebookLM        → research_start 多源深度综合（需认证）
+└── context7 MCP      → 库/框架精确文档（技术调研时）
+
+Layer 2 — 深度挖掘（按需）:
+├── WebFetch          → 抓取 Layer 1 关键 URL 全文
+└── Chrome MCP        → 需要交互的页面
+
+Layer 3 — 交叉验证:
+└── Leader            → 消除矛盾，综合结论，输出最终报告
+```
+
+### 并行调度
+
+无依赖的任务必须并行调度：
+- 多个 Agent tool 调用放在同一个 message 中
+- Gemini/Codex 用 `run_in_background: true` 后台执行
+- **Researcher 可与 Generator 并行**（研究和实现无依赖时）
+- 等全部完成后统一审查
+
+---
+
+## Worktree 管理
+
+| 操作 | 命令 |
+|---|---|
+| 创建 | `/git-worktree add sprint-<N>-<agent> -b sprint/<N>-<agent>` |
+| 路径 | `../.zcf/selfmodel/sprint-<N>-<agent>/` |
+| 列表 | `git worktree list` |
+| 审 diff | `git diff main...sprint/<N>-<agent>` |
+| 合并 | `git merge sprint/<N>-<agent> --no-ff -m "Sprint <N>: <title>"` |
+| 清理 | `/git-worktree remove sprint-<N>-<agent>` |
+
+---
+
+## 两层静默执行
+
+| Layer | 机制 | 作用 |
+|---|---|---|
+| 1 | `CI=true GIT_TERMINAL_PROMPT=0` | 环境变量跳过交互 |
+| 2 | `timeout <N>` | 硬超时，超时即 kill |
+
+完整模式: `CI=true GIT_TERMINAL_PROMPT=0 timeout <N> <command>`
+
+**CRITICAL**: 不要使用 `yes |` 管道。`yes` 的无限 stdin 流在 Gemini CLI sandbox
+relaunch 时导致 `spawn E2BIG`（stdin buffer 积累数 MB 数据超出 execve ARG_MAX）。
+Gemini `--yolo` 和 Codex `--full-auto` 已原生处理交互确认，`yes |` 完全不需要。
+
+---
+
+## 超时指南
+
+| 任务类型 | Timeout | 说明 |
+|---|---|---|
+| **Evaluator 评审** | **120s** | **只读分析，不做实现** |
+| 单文件编辑 / 简单修复 | 60s | 快速操作 |
+| 组件创建 / 中等复杂度 | 120s | 大部分 Sprint 标准 |
+| 多文件实现 / 复杂逻辑 | 180s | 单次最大值 |
+| **Researcher 调研** | **300s** | **搜索+综合需要时间** |
+| **E2E 验证（完整）** | **300s** | **build + test + server 启动验证** |
+| **E2E 验证（仅 build）** | **120s** | **降级通道，仅编译检查** |
+| npm install / build | 300s | 网络延迟不可控 |
+
+---
+
+## Backpressure 协议
+
+### Generator（Gemini/Codex/Opus）
+
+1. **第一次超时** → 相同 timeout 重试一次
+2. **第二次超时** → 拆分为更小子 Sprint，每个 ≤60s
+3. **第三次超时** → 升级到 Leader 手动介入，记录到 lessons-learned.md
+
+失败时保留 worktree 不清理，便于诊断。
+
+### Researcher
+
+1. **第一次超时/失败** → 相同 timeout 重试一次
+2. **第二次超时/失败** → 降级通道：Gemini -G → Leader 用 WebSearch + WebFetch 自研
+3. **第三次失败** → Leader 用 Chrome MCP 手动搜索 → 记录到 lessons-learned.md
+
+降级链: `Gemini -G` → `WebSearch + WebFetch` → `Chrome MCP` → `Leader 自研`
+
+### Evaluator
+
+1. **第一次超时** → 相同通道重试
+2. **第二次超时** → 切换通道（Opus ↔ Gemini）
+3. **两通道均失败** → Leader self-fallback，review 记录标注 `evaluator: self-fallback`
