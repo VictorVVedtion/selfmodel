@@ -88,8 +88,7 @@
   "detected_stack": {
     "type": "unknown",
     "stacks": [],
-    "frameworks": [],
-    "test_tools": []
+    "frameworks": []
   },
   "skills_evaluated": {},
   "worktrees_active": [],

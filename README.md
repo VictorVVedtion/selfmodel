@@ -1,6 +1,22 @@
-# selfmodel
+<p align="center">
+  <img src="assets/logo.png" alt="selfmodel logo" width="120">
+</p>
 
-A self-evolving AI Agent Team — agents that rewrite their own operating manual.
+<h1 align="center">selfmodel</h1>
+
+<p align="center">
+  <strong>A self-evolving AI Agent Team — agents that rewrite their own operating manual.</strong>
+</p>
+
+<p align="center">
+  <a href="https://github.com/VictorVVedtion/selfmodel/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="MIT License"></a>
+  <img src="https://img.shields.io/badge/version-0.2.0-green.svg?style=flat-square" alt="Version 0.2.0">
+  <img src="https://img.shields.io/badge/agents-7_roles-8B5CF6.svg?style=flat-square" alt="7-Role Agent Team">
+  <img src="https://img.shields.io/badge/isolation-git_worktree-D97706.svg?style=flat-square" alt="Git Worktree Isolation">
+  <img src="https://img.shields.io/badge/platform-Claude_Code-000000.svg?style=flat-square&logo=anthropic" alt="Claude Code">
+</p>
+
+---
 
 ## What is this?
 
@@ -384,6 +400,12 @@ Backups stored in `~/.claude/.backups/` (not in skills directory).
 6. **True Artist** — Every line of code is a signed work of art
 7. **Efficiency First** — Parallelize everything that has no dependency
 
+## Contributing
+
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md).
+
 ## License
 
-MIT
+[MIT](LICENSE) — Copyright (c) 2026 VictorVVedtion

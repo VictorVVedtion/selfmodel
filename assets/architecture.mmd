@@ -1,0 +1,62 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#1A1A1A', 'primaryTextColor': '#FFFFFF', 'primaryBorderColor': '#4D4D4D', 'lineColor': '#8C8C8C', 'secondaryColor': '#2B2B2B', 'tertiaryColor': '#2B2B2B'}}}%%
+graph TD
+
+    %% 节点定义
+    Leader["<div style='font-size:16px; font-weight:bold'>Leader (Opus 4.6)</div><div style='font-size:12px; color:#A0A0A0'>Planner & Orchestrator</div><div style='font-size:11px; color:#c75959; margin-top:4px'>Never implements</div>"]
+    
+    subgraph Agents [Agent Generators]
+        direction LR
+        Gemini["Frontend<br/>Gemini CLI"]
+        Codex["Backend<br/>Codex CLI"]
+        Opus["Full-stack<br/>Opus Agent"]
+    end
+
+    subgraph Worktrees [Isolated Git Worktrees]
+        WT1[sprint/1-gemini]
+        WT2[sprint/2-codex]
+        WT3[sprint/3-opus]
+    end
+
+    subgraph Evaluation [Parallel Evaluation]
+        direction LR
+        Eval["Independent Evaluator<br/>(Code Quality & Rules)"]
+        E2E["E2E Agent v2<br/>(Runtime Verification)"]
+    end
+    
+    Rampage["/rampage<br/>(Chaos Testing)"]
+    Verdict{"Final Verdict"}
+    Human["Human Escalation"]
+
+    %% 连接线路
+    Leader -- "Dispatches Inbox Tasks" --> Agents
+    
+    Gemini -.-> WT1
+    Codex -.-> WT2
+    Opus -.-> WT3
+    WT1 -. "Atomic Commit" .-> WT1
+    
+    WT1 & WT2 & WT3 == "Code Diff & Build" ==> Evaluation
+    
+    Eval & E2E -- "Merge Verdicts" --> Verdict
+    
+    Verdict -- "Pass (>= 7.0)" --> Rampage
+    Verdict -- "Fail (< 5.0)" --> Agents
+    Verdict -- "Revise (5.0 - 6.9)" --> Agents
+    Verdict -- "Conflict" --> Human
+    
+    Rampage -- "Accept" --> FinalMerge["Merge to main"]
+    Rampage -- "Critical Bugs" --> Agents
+    
+    %% 样式
+    classDef default fill:#1E1E1E,stroke:#444,stroke-width:1px,color:#EAEAEA,rx:6px,ry:6px;
+    classDef highlight fill:#2E2E2E,stroke:#777,stroke-width:1.5px,color:#FFF;
+    classDef warning fill:#2A1F1F,stroke:#663333,stroke-width:1.5px,color:#FFF;
+    classDef decision fill:#2A2A2A,stroke:#555,stroke-width:1.5px;
+    
+    class Leader highlight
+    class Rampage warning
+    class Verdict decision
+    
+    style Agents fill:none,stroke:#444,stroke-width:1px,stroke-dasharray: 4 4
+    style Worktrees fill:none,stroke:#69A27F,stroke-width:1px,stroke-dasharray: 4 4
+    style Evaluation fill:none,stroke:#8B6C4F,stroke-width:1px,stroke-dasharray: 4 4

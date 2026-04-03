@@ -67,12 +67,22 @@ if [[ "${NORMALIZED}" == .gitignore ]]; then
     exit 0
 fi
 
-# ── 白名单外：拦截 ──
-# 自动记录拦截事件到 lessons-learned（Auto-Learned 部分）
-PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] hook=enforce-leader-worktree target=$(basename "${FILE_PATH}") reason=outside-whitelist" \
-  >> "${PROJECT_ROOT}/.selfmodel/state/hook-intercepts.log" 2>/dev/null || true
+# 7. Project infrastructure files (LICENSE, VERSION, CHANGELOG, etc.)
+if [[ "${NORMALIZED}" == LICENSE* || "${NORMALIZED}" == VERSION || "${NORMALIZED}" == CHANGELOG* ]]; then
+    exit 0
+fi
 
+# 8. .github/ directory (issue templates, PR templates, workflows)
+if [[ "${NORMALIZED}" == .github/* ]]; then
+    exit 0
+fi
+
+# 9. assets/ directory (visual assets, diagrams)
+if [[ "${NORMALIZED}" == assets/* ]]; then
+    exit 0
+fi
+
+# ── 白名单外：拦截 ──
 {
     echo "🚨 [Hook 拦截] 违反「Leader 不下场」规则"
     echo ""

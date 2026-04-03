@@ -55,11 +55,6 @@ if [[ -d ".selfmodel/contracts/active" ]]; then
 fi
 
 if [[ "${ACTIVE_CONTRACT_COUNT}" -eq 0 ]]; then
-    # 自动记录拦截事件到 lessons-learned（Auto-Learned 部分）
-    PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-    echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] hook=enforce-agent-rules tool=$(printf '%s' "${COMMAND}" | awk '{print $1}') reason=no-active-contract" \
-      >> "${PROJECT_ROOT}/.selfmodel/state/hook-intercepts.log" 2>/dev/null || true
-
     {
         echo "🚨 [Hook 拦截] 违反「Sprint 合约制」规则"
         echo ""
@@ -80,10 +75,10 @@ fi
 
 # ── Inbox 缓冲检查 ──
 if [[ "${HAS_GEMINI}" == "true" ]]; then
-    # Gemini CLI 有三种用途：Frontend (inbox/gemini/)、Researcher (inbox/research/)、Evaluator (inbox/evaluator/)
+    # Gemini CLI 有两种用途：Frontend (inbox/gemini/) 和 Researcher (inbox/research/)
     # 任一 inbox 有 .md 文件即放行
     GEMINI_INBOX_COUNT=0
-    for inbox_dir in ".selfmodel/inbox/gemini" ".selfmodel/inbox/research" ".selfmodel/inbox/evaluator"; do
+    for inbox_dir in ".selfmodel/inbox/gemini" ".selfmodel/inbox/research"; do
         if [[ -d "${inbox_dir}" ]]; then
             while IFS= read -r -d '' _; do
                 GEMINI_INBOX_COUNT=$((GEMINI_INBOX_COUNT + 1))
@@ -92,10 +87,6 @@ if [[ "${HAS_GEMINI}" == "true" ]]; then
     done
 
     if [[ "${GEMINI_INBOX_COUNT}" -eq 0 ]]; then
-        PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-        echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] hook=enforce-agent-rules tool=gemini reason=no-gemini-inbox" \
-          >> "${PROJECT_ROOT}/.selfmodel/state/hook-intercepts.log" 2>/dev/null || true
-
         {
             echo "🚨 [Hook 拦截] 违反「通信缓冲隔离」规则"
             echo ""
@@ -122,10 +113,6 @@ if [[ "${HAS_CODEX}" == "true" ]]; then
     fi
 
     if [[ "${CODEX_INBOX_COUNT}" -eq 0 ]]; then
-        PROJECT_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-        echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] hook=enforce-agent-rules tool=codex reason=no-codex-inbox" \
-          >> "${PROJECT_ROOT}/.selfmodel/state/hook-intercepts.log" 2>/dev/null || true
-
         {
             echo "🚨 [Hook 拦截] 违反「通信缓冲隔离」规则"
             echo ""

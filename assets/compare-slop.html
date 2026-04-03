@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>selfmodel | Never Lazy Compare</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
+
+        body {
+            margin: 0;
+            padding: 50px;
+            background-color: #111;
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            justify-content: center;
+        }
+
+        .card {
+            background: #1e1e1e;
+            border: 1px solid #333;
+            border-radius: 12px;
+            width: 900px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+            overflow: hidden;
+        }
+
+        .header {
+            padding: 24px 30px;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #FFF;
+            margin: 0;
+        }
+
+        .subtitle {
+            font-size: 14px;
+            color: #888;
+            margin-top: 4px;
+        }
+
+        .comparison {
+            display: flex;
+        }
+
+        .side {
+            flex: 1;
+            padding: 30px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .side.bad {
+            background: #1a1515;
+            border-right: 1px solid #333;
+        }
+
+        .side.good {
+            background: #151a17;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-family: 'Inter', sans-serif;
+            font-size: 12px;
+            margin-bottom: 20px;
+        }
+
+        .badge.bad {
+            background: rgba(255, 95, 86, 0.1);
+            color: #ff5f56;
+            border: 1px solid rgba(255, 95, 86, 0.3);
+        }
+
+        .badge.good {
+            background: rgba(39, 201, 63, 0.1);
+            color: #27c93f;
+            border: 1px solid rgba(39, 201, 63, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .badge.good::before {
+            content: "❯_";
+            color: #d7af70;
+        }
+
+        /* Syntax Highlighting */
+        .kw { color: #c678dd; } /* Keyword */
+        .fn { color: #61afef; } /* Function */
+        .str { color: #98c379; } /* String */
+        .cmt { color: #5c6370; font-style: italic; } /* Comment */
+        .op { color: #56b6c2; } /* Operator */
+        .var { color: #e06c75; } /* Variable */
+        .cls { color: #e5c07b; } /* Class */
+
+        pre {
+            margin: 0;
+            white-space: pre-wrap;
+            color: #abb2bf;
+        }
+
+        .highlight-bad {
+            background: rgba(255, 95, 86, 0.2);
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+
+        .highlight-good {
+            background: rgba(39, 201, 63, 0.15);
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="header">
+            <div>
+                <h2 class="title">Iron Rule #3: Never Lazy</h2>
+                <div class="subtitle">selfmodel Evaluator Auto-Rejects AI Slop</div>
+            </div>
+        </div>
+        <div class="comparison">
+            <div class="side bad">
+                <div class="badge bad">❌ Standard AI Output</div>
+                <pre><span class="kw">export async function</span> <span class="fn">fetchUserData</span>(<span class="var">userId</span>: <span class="cls">string</span>) {
+  <span class="kw">try</span> {
+    <span class="kw">const</span> <span class="var">res</span> <span class="op">=</span> <span class="kw">await</span> <span class="fn">fetch</span>(<span class="str">`/api/users/${</span><span class="var">userId</span><span class="str">}`</span>);
+    <span class="kw">const</span> <span class="var">data</span> <span class="op">=</span> <span class="kw">await</span> <span class="var">res</span>.<span class="fn">json</span>();
+    <span class="kw">return</span> <span class="var">data</span>;
+  } <span class="kw">catch</span> (<span class="var">error</span>) {
+<span class="highlight-bad">    <span class="cmt">// TODO: implement proper error handling later</span>
+    <span class="fn">console</span>.<span class="fn">error</span>(<span class="var">error</span>);
+    <span class="kw">return</span> <span class="kw">null</span>; <span class="cmt">// Return null for simplicity</span></span>
+  }
+}</pre>
+            </div>
+            <div class="side good">
+                <div class="badge good">selfmodel (Opus 4.6 Leader)</div>
+                <pre><span class="kw">export async function</span> <span class="fn">fetchUserData</span>(<span class="var">userId</span>: <span class="cls">string</span>): <span class="cls">Promise</span><<span class="cls">User</span>> {
+  <span class="kw">try</span> {
+    <span class="kw">const</span> <span class="var">res</span> <span class="op">=</span> <span class="kw">await</span> <span class="fn">fetch</span>(<span class="str">`/api/users/${</span><span class="var">userId</span><span class="str">}`</span>);
+<span class="highlight-good">    <span class="kw">if</span> (!<span class="var">res</span>.<span class="var">ok</span>) {
+      <span class="kw">throw new</span> <span class="cls">ApiError</span>(<span class="var">res</span>.<span class="var">status</span>, <span class="str">'USER_NOT_FOUND'</span>);
+    }</span>
+    <span class="kw">return</span> <span class="kw">await</span> <span class="var">res</span>.<span class="fn">json</span>();
+  } <span class="kw">catch</span> (<span class="var">error</span>) {
+<span class="highlight-good">    <span class="cls">Metrics</span>.<span class="fn">inc</span>(<span class="str">'fetch_user_errors'</span>);
+    <span class="kw">throw new</span> <span class="cls">AppException</span>(<span class="str">'Failed to load user'</span>, { <span class="var">cause</span>: <span class="var">error</span> });</span>
+  }
+}</pre>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

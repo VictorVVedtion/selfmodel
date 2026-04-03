@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>selfmodel | Social Banner</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0d0d0d;
+            background-image: radial-gradient(circle at 100% 0%, #1a1a2e 0%, transparent 50%),
+                              radial-gradient(circle at 0% 100%, #161616 0%, transparent 50%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Inter', sans-serif;
+            color: #ffffff;
+            overflow: hidden;
+        }
+
+        .banner-container {
+            width: 1200px;
+            height: 630px; /* 1200x630 is standard OpenGraph resolution */
+            background: rgba(18, 18, 18, 0.8);
+            border: 1px solid #333;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            border-radius: 16px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 70px 80px;
+            box-sizing: border-box;
+            position: relative;
+            overflow: hidden;
+            backdrop-filter: blur(10px);
+        }
+        
+        .grid-bg {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-size: 40px 40px;
+            background-image: linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                              linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            z-index: 0;
+            opacity: 0.7;
+        }
+
+        .content {
+            z-index: 1;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .logo {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 32px;
+            font-weight: 700;
+            color: #EDEDED;
+            letter-spacing: -1px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .logo::before {
+            content: "❯_";
+            color: #d7af70;
+        }
+
+        h1 {
+            font-size: 72px;
+            font-weight: 800;
+            line-height: 1.1;
+            margin: 0 0 20px 0;
+            letter-spacing: -2px;
+            background: linear-gradient(135deg, #FFF 0%, #A0A0A0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        h2 {
+            font-size: 28px;
+            font-weight: 400;
+            color: #888;
+            margin: 0;
+            max-width: 600px;
+        }
+
+        .terminal-window {
+            z-index: 1;
+            background: #000;
+            border: 1px solid #333;
+            border-radius: 8px;
+            width: 100%;
+            height: 200px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 15px;
+            color: #c9c9c9;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            position: relative;
+        }
+
+        .terminal-header {
+            background: #1a1a1a;
+            padding: 10px 16px;
+            border-bottom: 1px solid #333;
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .dot {
+            width: 10px; height: 10px; border-radius: 50%;
+        }
+        .dot.red { background: #ff5f56; }
+        .dot.yellow { background: #ffbd2e; }
+        .dot.green { background: #27c93f; }
+
+        .terminal-body {
+            padding: 24px;
+            line-height: 1.6;
+        }
+
+        .t-cmd { color: #FFF; font-weight: bold; }
+        .t-arg { color: #d7af70; }
+        .t-dim { color: #666; }
+        .t-green { color: #87C596; }
+        .t-cursor {
+            display: inline-block;
+            width: 8px;
+            height: 16px;
+            background: #FFF;
+            margin-left: 6px;
+            vertical-align: text-bottom;
+            animation: blink 1s step-end infinite;
+        }
+
+        @keyframes blink { 50% { opacity: 0; } }
+        
+        .badges {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 40px;
+        }
+        
+        .badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 4px;
+            background: #222;
+            color: #AAA;
+            border: 1px solid #444;
+        }
+    </style>
+</head>
+<body>
+    <div class="banner-container" id="banner">
+        <div class="grid-bg"></div>
+        <div class="content top">
+            <header>
+                <div class="logo">selfmodel</div>
+            </header>
+            <h1>The Self-Evolving<br/>AI Agent Team.</h1>
+            <div class="badges">
+                <div class="badge">Orchestration Loop</div>
+                <div class="badge">Strict Worktree Isolation</div>
+                <div class="badge">Never Lazy / Never Mock</div>
+            </div>
+        </div>
+
+        <div class="terminal-window">
+            <div class="terminal-header">
+                <div class="dot red"></div>
+                <div class="dot yellow"></div>
+                <div class="dot green"></div>
+            </div>
+            <div class="terminal-body">
+                <span><span class="t-green">➜</span>  <span class="t-dim">selfmodel</span> <span class="t-cmd">bash</span> <span class="t-arg">scripts/selfmodel.sh status</span></span><br/>
+                <span class="t-dim">[Opus 4.6 Leader] Scanning active sprint contracts...</span><br/>
+                <span class="t-dim">10:02:44  [INFO]   </span><span class="t-green">sprint/1-gemini</span>     <span>UI Components merged</span><br/>
+                <span class="t-dim">10:02:45  [E2E]    </span><span class="t-green">PASS</span>                  <span>Atomic verifications: 8/8</span><br/>
+                <span class="t-dim">10:02:45  [SYSTEM] </span><span class="t-cmd">Starting Chaos Testing (/rampage)...</span><span class="t-cursor"></span>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

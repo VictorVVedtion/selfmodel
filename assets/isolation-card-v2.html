@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Git Worktree Isolation - selfmodel</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+        body {
+            margin: 0; padding: 0;
+            background-color: #111113;
+            color: #d1d1d1;
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .canvas {
+            width: 1000px;
+            height: 800px;
+            position: relative;
+            background-image: 
+                linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+        }
+
+        .header {
+            text-align: center;
+            margin-top: 80px;
+        }
+
+        h1 {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 32px;
+            font-weight: 500;
+            margin: 0 0 10px 0;
+            color: #f0f0f0;
+            letter-spacing: -0.5px;
+        }
+
+        .subtitle {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            color: #777;
+        }
+
+        /* SVG Paths */
+        .paths {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+        
+        path {
+            fill: none;
+            stroke-width: 2.5;
+            stroke-linecap: round;
+        }
+
+        .trunk { stroke: #555; }
+        .branch-1 { stroke: #a3a3a3; }
+        .branch-2 { stroke: #a3a3a3; }
+        .branch-3 { stroke: #a3a3a3; }
+        
+        .dash-line {
+            stroke: #444;
+            stroke-dasharray: 6 4;
+        }
+
+        .node-dot {
+            fill: #a3a3a3;
+            stroke: #111113;
+            stroke-width: 4;
+        }
+        .main-dot { fill: #666; }
+
+        /* Commit Elements */
+        .commit {
+            position: absolute;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+        }
+        .commit-label {
+            position: absolute;
+            top: 20px;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            color: #888;
+        }
+        
+        /* Main Branch */
+        .c-main-1 { top: 460px; left: 150px; }
+        .c-main-2 { top: 460px; left: 280px; }
+        
+        .c-main-1-label { top: 480px; left: 150px; color: #666; }
+        .c-main-2-label { top: 480px; left: 280px; color: #aaa; }
+        
+        .main-branch-title {
+            position: absolute;
+            top: 430px; left: 100px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px; color: #666;
+        }
+
+        /* Worktree Cards */
+        .worktree {
+            position: absolute;
+            width: 320px;
+            background: #18181b;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 20px 24px;
+            box-sizing: border-box;
+            z-index: 2;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+
+        .wt-1 { top: 220px; left: 450px; }
+        .wt-2 { top: 400px; left: 450px; }
+        .wt-3 { top: 580px; left: 450px; }
+
+        .wt-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+
+        .wt-title {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 15px;
+            color: #ddd;
+            margin: 0 0 6px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .wt-title span {
+            background: #2a2a30;
+            color: #aaa;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            border: 1px solid #444;
+        }
+
+        .wt-path {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .status {
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 600;
+        }
+
+        .status.clean { color: #87C596; }
+        .status.modified { color: #D7AF70; }
+        .status.delivered { color: #81A1C1; }
+        
+        .status-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+        }
+
+        .commit-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: #888;
+            padding-top: 15px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* Checkouts Path Annotations */
+        .annot {
+            position: absolute;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            color: #888;
+        }
+        .a-co-1 { top: 350px; left: 300px; }
+        .a-co-2 { top: 435px; left: 340px; }
+        .a-co-3 { top: 570px; left: 320px; }
+        
+        /* Shared Git Dir */
+        .git-dir {
+            position: absolute;
+            top: 730px;
+            left: 770px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            color: #999;
+            background: #111113;
+            padding: 4px 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 5;
+        }
+        
+        .git-icon {
+            width: 24px; height: 24px;
+            background: #222; border-radius: 6px;
+            display: flex; justify-content: center; align-items: center;
+            border: 1px solid #444;
+        }
+        
+        svg { width: 100%; height: 100%; }
+        
+    </style>
+</head>
+<body>
+
+    <div class="canvas">
+        <div class="header">
+            <h1>GIT WORKTREE ISOLATION</h1>
+            <div class="subtitle">Multi-agent parallel execution via strictly isolated physical branches</div>
+        </div>
+
+        <svg class="paths">
+            <!-- Main Trunk -->
+            <path class="trunk" d="M 80,460 L 280,460" />
+            
+            <!-- Target nodes inside cards -->
+            <!-- wt1 line: 490px, 290px -> wt2 line: 490, 470 -> wt3: 490, 650 -->
+            
+            <!-- Branch 1 (Gemini) -->
+            <path class="branch-1" d="M 280,460 C 330,460 350,290 490,290 L 690,290" />
+            <!-- Branch 2 (Codex) -->
+            <path class="branch-2" d="M 280,460 C 330,460 350,470 490,470 L 690,470" />
+            <!-- Branch 3 (Opus) -->
+            <path class="branch-3" d="M 280,460 C 330,460 350,650 490,650 L 690,650" />
+
+            <!-- Shared Git Directory Dashed Lines -->
+            <path class="dash-line" d="M 690,320 L 780,320 L 780,730" />
+            <path class="dash-line" d="M 690,500 L 780,500 L 780,730" />
+            <path class="dash-line" d="M 690,680 L 780,680 L 780,730" />
+
+            <!-- Main Nodes -->
+            <circle class="node-dot main-dot" cx="150" cy="460" r="8" />
+            <circle class="node-dot" cx="280" cy="460" r="8" />
+
+            <!-- Worktree Nodes -->
+            <circle class="node-dot" cx="490" cy="290" r="8" />
+            <circle class="node-dot" cx="690" cy="290" r="8" />
+            
+            <circle class="node-dot" cx="490" cy="470" r="8" />
+            <circle class="node-dot" cx="690" cy="470" r="8" />
+
+            <circle class="node-dot" cx="490" cy="650" r="8" />
+            <circle class="node-dot" cx="690" cy="650" r="8" />
+            
+            <!-- Arrow Heads -->
+            <polygon fill="#a3a3a3" points="475,286 485,290 475,294" />
+            <polygon fill="#a3a3a3" points="475,466 485,470 475,474" />
+            <polygon fill="#a3a3a3" points="475,646 485,650 475,654" />
+        </svg>
+
+        <div class="main-branch-title">'main' branch</div>
+        <div class="commit-label c-main-1-label">commit 01</div>
+        <div class="commit-label c-main-2-label">commit 02</div>
+
+        <div class="annot a-co-1">checkout</div>
+        <div class="annot a-co-2">checkout</div>
+        <div class="annot a-co-3">checkout</div>
+
+        <!-- Worktree 1 -->
+        <div class="worktree wt-1">
+            <div class="wt-header">
+                <div>
+                    <h3 class="wt-title">sprint-1-gemini <span>Gemini CLI</span></h3>
+                    <div class="wt-path">sprint/1-frontend</div>
+                </div>
+                <div class="status clean">
+                    <div class="status-dot" style="background:#87C596"></div> Clean
+                </div>
+            </div>
+            <div class="commit-text">
+                <span>init sprint/1</span>
+                <span>commit A</span>
+            </div>
+        </div>
+
+        <!-- Worktree 2 -->
+        <div class="worktree wt-2">
+            <div class="wt-header">
+                <div>
+                    <h3 class="wt-title">sprint-2-codex <span>Codex CLI</span></h3>
+                    <div class="wt-path">sprint/2-api</div>
+                </div>
+                <div class="status modified">
+                    <div class="status-dot" style="background:#D7AF70"></div> Modified
+                </div>
+            </div>
+            <div class="commit-text">
+                <span>feat(api)/auth</span>
+                <span>commit B</span>
+            </div>
+        </div>
+
+        <!-- Worktree 3 -->
+        <div class="worktree wt-3">
+            <div class="wt-header">
+                <div>
+                    <h3 class="wt-title">sprint-3-opus <span>Opus Agent</span></h3>
+                    <div class="wt-path">sprint/3-architect</div>
+                </div>
+                <div class="status delivered">
+                    <div class="status-dot" style="background:#81A1C1"></div> Delivered
+                </div>
+            </div>
+            <div class="commit-text">
+                <span>refactor(core)</span>
+                <span>commit C</span>
+            </div>
+        </div>
+        
+        <!-- Shared Git Dir -->
+        <div class="git-dir">
+            <div class="git-icon">
+                <svg viewBox="0 0 24 24" width="14" height="14" stroke="#ddd" stroke-width="2" fill="none">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                </svg>
+            </div>
+            shared .git/ dir
+        </div>
+
+    </div>
+
+</body>
+</html>
