@@ -1,0 +1,8 @@
+{
+  "ignorePatterns": [
+    {
+      "pattern": "^https://github.com/VictorVVedtion/selfmodel/labels/"
+    }
+  ],
+  "aliveStatusCodes": [200, 206, 301, 302, 403]
+}

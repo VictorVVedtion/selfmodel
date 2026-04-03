@@ -56,6 +56,18 @@ selfmodel/
 └── benchmark/             # Evaluation harness
 ```
 
+## Areas Where Help is Needed
+
+We especially welcome contributions in these areas:
+
+- **CI/CD** — GitHub Actions workflows, automated testing
+- **Platform support** — testing on different Linux distributions and shells
+- **Tech stack detection** — adding more frameworks to `selfmodel.sh adapt` (Ruby, Swift, Kotlin, etc.)
+- **Documentation** — tutorials, guides, translations (Chinese, Japanese, Korean)
+- **Playbook improvements** — better scoring rubrics, evaluation prompts, dispatch heuristics
+
+Check issues labeled [`good first issue`](https://github.com/VictorVVedtion/selfmodel/labels/good%20first%20issue) for beginner-friendly tasks.
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the MIT License.
