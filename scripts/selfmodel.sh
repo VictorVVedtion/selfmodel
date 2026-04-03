@@ -321,7 +321,29 @@ print_team() {
 
 # ─── CMD: init ────────────────────────────────────────────────────────────────
 cmd_init() {
+    [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]] && {
+        echo "Usage: selfmodel init [directory]"
+        echo ""
+        echo "  Initialize selfmodel in a new or existing project."
+        echo "  Creates .selfmodel/ structure, generates CLAUDE.md, and detects project stack."
+        echo ""
+        echo "Arguments:"
+        echo "  directory    Target directory (default: current directory)"
+        return 0
+    }
+
     local dir="${1:-.}"
+
+    # Validate path
+    if [[ "$dir" != "." && ! -e "$dir" ]]; then
+        err "Directory does not exist: $dir"
+        exit 1
+    fi
+    if [[ "$dir" != "." && -e "$dir" && ! -d "$dir" ]]; then
+        err "Path is not a directory: $dir"
+        exit 1
+    fi
+
     info "Initializing selfmodel in $(bold "$dir")"
 
     # Check for existing selfmodel
@@ -390,7 +412,29 @@ cmd_init() {
 
 # ─── CMD: adapt ───────────────────────────────────────────────────────────────
 cmd_adapt() {
+    [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]] && {
+        echo "Usage: selfmodel adapt [directory]"
+        echo ""
+        echo "  Adapt selfmodel to an existing project."
+        echo "  Re-detects project stack and updates configuration without overwriting agents or history."
+        echo ""
+        echo "Arguments:"
+        echo "  directory    Target directory (default: current directory)"
+        return 0
+    }
+
     local dir="${1:-.}"
+
+    # Validate path
+    if [[ "$dir" != "." && ! -e "$dir" ]]; then
+        err "Directory does not exist: $dir"
+        exit 1
+    fi
+    if [[ "$dir" != "." && -e "$dir" && ! -d "$dir" ]]; then
+        err "Path is not a directory: $dir"
+        exit 1
+    fi
+
     info "Adapting selfmodel to existing project in $(bold "$dir")"
 
     # Detect stack
@@ -464,6 +508,21 @@ cmd_adapt() {
 
 # ─── CMD: update ──────────────────────────────────────────────────────────────
 cmd_update() {
+    [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]] && {
+        echo "Usage: selfmodel update [directory] [flags]"
+        echo ""
+        echo "  Update selfmodel playbook files."
+        echo "  Re-detects project stack and regenerates playbook from templates."
+        echo ""
+        echo "Arguments:"
+        echo "  directory        Target directory (default: current directory)"
+        echo ""
+        echo "Flags:"
+        echo "  --remote         Fetch latest playbook from GitHub instead of local templates"
+        echo "  --version TAG    Specify GitHub tag/branch to fetch (requires --remote, default: main)"
+        return 0
+    }
+
     local dir="."
     local remote=false
     local version="main"
@@ -476,6 +535,11 @@ cmd_update() {
             *)         dir="$1"; shift ;;
         esac
     done
+
+    # Warn if --version used without --remote
+    if [[ "$remote" == "false" && "$version" != "main" ]]; then
+        warn "--version requires --remote, ignoring"
+    fi
 
     info "Updating selfmodel playbook in $(bold "$dir")"
 
@@ -664,11 +728,28 @@ remote_update() {
 
 # ─── CMD: version ─────────────────────────────────────────────────────────────
 cmd_version() {
+    [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]] && {
+        echo "Usage: selfmodel version"
+        echo ""
+        echo "  Print the selfmodel version."
+        return 0
+    }
     echo "selfmodel $SELFMODEL_VERSION"
 }
 
 # ─── CMD: status ──────────────────────────────────────────────────────────────
 cmd_status() {
+    [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]] && {
+        echo "Usage: selfmodel status [directory]"
+        echo ""
+        echo "  Show selfmodel project status."
+        echo "  Displays team state, active contracts, worktrees, and quality trends."
+        echo ""
+        echo "Arguments:"
+        echo "  directory    Target directory (default: current directory)"
+        return 0
+    }
+
     local dir="${1:-.}"
     local selfmodel_dir="$dir/.selfmodel"
 
@@ -1480,9 +1561,9 @@ main() {
         adapt)   check_deps; cmd_adapt "$@" ;;
         update)  check_deps; cmd_update "$@" ;;
         status)  check_deps; cmd_status "$@" ;;
-        version) cmd_version ;;
-        -v)      cmd_version ;;
-        --version) cmd_version ;;
+        version) cmd_version "$@" ;;
+        -v)      cmd_version "$@" ;;
+        --version) cmd_version "$@" ;;
         help|--help|-h)
             echo "selfmodel $SELFMODEL_VERSION — AI Agent Team Workflow"
             echo ""
@@ -1507,7 +1588,7 @@ main() {
             ;;
         *)
             err "Unknown command: $cmd"
-            err "Run 'selfmodel help' for usage."
+            err "Run 'selfmodel --help' for usage."
             exit 1
             ;;
     esac
