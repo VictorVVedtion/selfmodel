@@ -22,12 +22,16 @@ if [[ ! -d "${SRC_DIR}/skill" ]]; then
 fi
 
 # Backup existing
+BACKUP_DIR="${HOME}/.claude/.backups"
+if [[ -d "${SKILL_DIR}" ]] || [[ -d "${CMD_DIR}" ]]; then
+    mkdir -p "${BACKUP_DIR}"
+fi
 if [[ -d "${SKILL_DIR}" ]]; then
     echo "Existing installation found. Backing up..."
-    mv "${SKILL_DIR}" "${SKILL_DIR}.bak.$(date +%s)"
+    mv "${SKILL_DIR}" "${BACKUP_DIR}/selfmodel.$(date +%s)"
 fi
 if [[ -d "${CMD_DIR}" ]]; then
-    mv "${CMD_DIR}" "${CMD_DIR}.bak.$(date +%s)"
+    mv "${CMD_DIR}" "${BACKUP_DIR}/selfmodel-commands.$(date +%s)"
 fi
 
 # Install
