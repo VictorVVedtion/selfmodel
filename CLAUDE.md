@@ -190,6 +190,7 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 **Verdict**: ≥7.0 Accept → merge | 5.0-6.9 Revise → feedback | <5.0 Reject → redo
 **Independent Evaluator**: All output reviewed by isolated Evaluator (Opus Agent or Gemini CLI, skeptical prompt). Details in `playbook/evaluator-prompt.md`. Leader acts on verdict mechanically.
 **E2E Verification (parallel with Evaluator)**: When Sprint has runnable deliverables or acceptance criteria contain runtime verbs (runs/renders/responds/starts/passes tests), dispatch E2E Agent in parallel with Evaluator. E2E parses each AC into atomic verifications, executes, and reports per-AC evidence. E2E FAIL upgrades ACCEPT→REVISE; build FAIL→REJECT. Load `playbook/e2e-protocol-v2.md` for full protocol.
+**Chaos Verification (after E2E PASS, optional)**: When Sprint has user-facing surfaces (WEB/CLI/API/LIB), Leader may dispatch `/rampage --selfmodel` as an advisory chaos gate. Rampage tests resilience against chaotic user behaviors (7 persona archetypes × 4 surface engines). RAMPAGE FAIL with critical issues upgrades ACCEPT→REVISE. Details in `quality-gates.md` Step 4.7.
 
 ## On-Demand Loading
 
@@ -203,6 +204,7 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 | Independent evaluation + skeptical prompt | `.selfmodel/playbook/evaluator-prompt.md` |
 | Automated orchestration loop (large projects) | `.selfmodel/playbook/orchestration-loop.md` |
 | E2E 验证协议 v2 | `.selfmodel/playbook/e2e-protocol-v2.md` |
+| 混沌渗透测试（Rampage） | `/rampage` skill (`~/.claude/skills/rampage/SKILL.md`) |
 | Context checkpoint + reset protocol | `.selfmodel/playbook/context-protocol.md` |
 
 ## Context Management
@@ -283,7 +285,7 @@ selfmodel/
     ├── inbox/research/                # Leader→Researcher queries+reports
     ├── inbox/evaluator/               # Leader→Evaluator eval files
     ├── inbox/e2e/                     # Leader→E2E Agent v2 验证任务
-    ├── artifacts/                     # E2E 验证产物（截图/日志/报告）
+    ├── artifacts/                     # 验证产物（E2E 截图/日志 + Rampage 韧性报告）
     ├── state/team.json                # Team state
     ├── state/next-session.md          # Session handoff
     ├── state/plan.md                  # Orchestration plan (phases + sprints)

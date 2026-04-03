@@ -1,0 +1,28 @@
+{
+  "project": "selfmodel",
+  "timestamp": "2026-04-03T12:50:00Z",
+  "duration_seconds": 240,
+  "intensity": "standard",
+  "surfaces": ["cli"],
+  "overall_resilience": 72,
+  "per_surface": {
+    "cli": {
+      "score": 72,
+      "coverage_pct": 100,
+      "journeys_total": 12,
+      "journeys_walked": 12,
+      "dimensions": {
+        "arguments": 59,
+        "stdin": 100,
+        "signals": 100,
+        "environment": 95,
+        "concurrency": 100,
+        "error_quality": 44
+      },
+      "findings": { "critical": 0, "high": 4, "medium": 2, "low": 1 }
+    }
+  },
+  "total_findings": { "critical": 0, "high": 4, "medium": 2, "low": 1 },
+  "personas_used": ["impatient", "confused", "explorer", "multitasker", "edge_case", "abandoner", "speedrunner"],
+  "verdict": "PASS_WITH_CONCERNS"
+}

@@ -16,11 +16,13 @@
 | 调研 / research / 选型 / 对比 / best practice / 怎么做 / 最佳方案 | **Researcher** | Google Search 接地，搜索深度和实时性最强 |
 | 技术选型 / 库对比 / 方案评估 | **Researcher → Leader** | 先搜再判，研究报告输入 Leader 决策 |
 | E2E / 运行验证 / 集成测试 / 端到端 | **E2E Agent** | 运行时验证，不做代码修改 |
+| 混沌测试 / chaos / rampage / 边界探索 / 压力测试 / 横冲直撞 | **Rampage (`/rampage`)** | 多 surface 混沌渗透，QA 通过后的混沌关卡 |
 
 **路由冲突优先级**: Leader > Evaluator > Researcher > Opus Agent > Gemini > Codex
 **Evaluator 约束**: Evaluator 只做评审，不做实现。只有 Leader 可以 dispatch Evaluator。
 **研究前置**: 涉及未知领域的实现任务，先派 Researcher 再派 Generator
 **研究 vs 实现**: 任务同时匹配研究和实现信号时，Researcher 优先（先搜再做）
+**Rampage 后置**: QA/E2E 通过后，对有用户交互面的 Sprint 可选派发 `/rampage` 做混沌验证
 **判断困难时**: 默认路由到 Opus Agent（安全选择，能力最全面）。
 
 ---
@@ -164,6 +166,25 @@ Layer 2 — 深度挖掘（按需）:
 Layer 3 — 交叉验证:
 └── Leader            → 消除矛盾，综合结论，输出最终报告
 ```
+
+### Rampage（混沌渗透 — Leader 直接调用 Skill）
+
+Rampage 不是 Agent，是 Claude Code Skill。Leader 在 E2E PASS 后直接调用：
+
+```
+Skill tool:
+  skill: "rampage"
+  args: "--selfmodel --budget 5m <target-url-or-cmd>"
+```
+
+或在对话中直接输入 `/rampage --selfmodel`。
+
+**不需要 worktree**（只读测试，不修改代码）
+**不需要 inbox**（参数通过 Skill args 传递）
+**产物输出**: `.selfmodel/artifacts/rampage-sprint-<N>.json` + `.gstack/rampage-reports/`
+
+**调用时机**: orchestration-loop.md Step 6.5（E2E PASS 且 Sprint 有用户交互面时）
+**Verdict 合并**: quality-gates.md Step 4.7
 
 ### 并行调度
 
