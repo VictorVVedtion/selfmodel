@@ -14,6 +14,7 @@
   <img src="https://img.shields.io/badge/agents-7_roles-8B5CF6.svg?style=flat-square" alt="7-Role Agent Team">
   <img src="https://img.shields.io/badge/isolation-git_worktree-D97706.svg?style=flat-square" alt="Git Worktree Isolation">
   <img src="https://img.shields.io/badge/platform-Claude_Code-000000.svg?style=flat-square&logo=anthropic" alt="Claude Code">
+  <a href="https://github.com/VictorVVedtion/selfmodel/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/VictorVVedtion/selfmodel/ci.yml?style=flat-square&label=CI" alt="CI"></a>
 </p>
 
 ---

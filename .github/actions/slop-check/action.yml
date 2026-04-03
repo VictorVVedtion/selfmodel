@@ -1,0 +1,101 @@
+name: 'AI Slop Check'
+description: 'Detect AI-generated low-quality code patterns (TODO, mock data, swallowed exceptions, AI pleasantries)'
+author: 'VictorVVedtion'
+
+branding:
+  icon: 'shield'
+  color: 'gray-dark'
+
+inputs:
+  path:
+    description: 'Directory to scan'
+    required: false
+    default: '.'
+  strict:
+    description: 'Fail on warnings too (not just auto-reject triggers)'
+    required: false
+    default: 'false'
+  comment:
+    description: 'Post results as PR comment'
+    required: false
+    default: 'true'
+
+outputs:
+  score:
+    description: 'Quality score (0-100)'
+    value: ${{ steps.scan.outputs.score }}
+  status:
+    description: 'Result status: clean, warning, or reject'
+    value: ${{ steps.scan.outputs.status }}
+  findings:
+    description: 'Number of findings'
+    value: ${{ steps.scan.outputs.findings }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run slop-detect
+      id: scan
+      shell: bash
+      run: |
+        ARGS="${{ inputs.path }}"
+        if [[ "${{ inputs.strict }}" == "true" ]]; then
+          ARGS="${ARGS} --strict"
+        fi
+
+        # Run with JSON output and capture
+        RESULT=$(bash ${{ github.action_path }}/../../../scripts/slop-detect.sh ${ARGS} --json 2>&1) || true
+
+        # Parse results
+        SCORE=$(echo "${RESULT}" | python3 -c "import sys,json; print(json.load(sys.stdin)['score'])" 2>/dev/null || echo "0")
+        STATUS=$(echo "${RESULT}" | python3 -c "import sys,json; print(json.load(sys.stdin)['status'])" 2>/dev/null || echo "error")
+        FINDING_COUNT=$(echo "${RESULT}" | python3 -c "import sys,json; print(len(json.load(sys.stdin)['findings']))" 2>/dev/null || echo "0")
+
+        echo "score=${SCORE}" >> $GITHUB_OUTPUT
+        echo "status=${STATUS}" >> $GITHUB_OUTPUT
+        echo "findings=${FINDING_COUNT}" >> $GITHUB_OUTPUT
+
+        # Also run human-readable output for logs
+        bash ${{ github.action_path }}/../../../scripts/slop-detect.sh ${{ inputs.path }} || true
+
+    - name: Comment on PR
+      if: inputs.comment == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        SCORE="${{ steps.scan.outputs.score }}"
+        STATUS="${{ steps.scan.outputs.status }}"
+        FINDINGS="${{ steps.scan.outputs.findings }}"
+
+        if [[ "${STATUS}" == "clean" ]]; then
+          EMOJI="🟢"
+          TITLE="AI Slop Check: Clean"
+        elif [[ "${STATUS}" == "warning" ]]; then
+          EMOJI="⚠️"
+          TITLE="AI Slop Check: ${FINDINGS} warning(s)"
+        else
+          EMOJI="🔴"
+          TITLE="AI Slop Check: ${FINDINGS} issue(s) found"
+        fi
+
+        BODY="${EMOJI} **${TITLE}** — Score: ${SCORE}/100
+
+        <details>
+        <summary>What is this?</summary>
+
+        AI Slop Check scans for common low-quality patterns in AI-generated code:
+        TODO/FIXME comments, mock data, swallowed exceptions, hardcoded secrets,
+        excessive comments, template error handling, and AI pleasantries.
+
+        Part of [selfmodel](https://github.com/VictorVVedtion/selfmodel).
+        </details>"
+
+        gh pr comment "${{ github.event.pull_request.number }}" --body "${BODY}"
+
+    - name: Fail if reject
+      if: steps.scan.outputs.status == 'reject' || (inputs.strict == 'true' && steps.scan.outputs.status == 'warning')
+      shell: bash
+      run: |
+        echo "::error::AI Slop Check failed with score ${{ steps.scan.outputs.score }}/100"
+        exit 1

@@ -45,6 +45,19 @@ jobs:
           # Verify uninstall script is valid bash
           bash -n uninstall.sh
 
+  slop-check:
+    name: AI Slop Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run slop-detect on scripts
+        run: bash scripts/slop-detect.sh scripts/ --strict || true
+      - name: Run slop-detect on project (if src/ exists)
+        run: |
+          if [[ -d "src" ]]; then
+            bash scripts/slop-detect.sh src/
+          fi
+
   markdown-links:
     name: Markdown Link Check
     runs-on: ubuntu-latest
