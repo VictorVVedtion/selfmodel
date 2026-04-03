@@ -16,10 +16,10 @@ jobs:
         run: sudo apt-get install -y shellcheck
       - name: Lint shell scripts
         run: |
-          shellcheck scripts/selfmodel.sh
-          shellcheck scripts/hooks/*.sh
-          shellcheck install.sh
-          shellcheck uninstall.sh
+          shellcheck --severity=error scripts/selfmodel.sh
+          shellcheck --severity=error scripts/hooks/*.sh
+          shellcheck --severity=error install.sh
+          shellcheck --severity=error uninstall.sh
 
   install-smoke-test:
     name: Install Smoke Test
@@ -55,3 +55,4 @@ jobs:
           use-quiet-mode: 'yes'
           config-file: '.github/mlc_config.json'
           check-modified-files-only: 'yes'
+          base-branch: 'main'
