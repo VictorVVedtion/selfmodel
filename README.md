@@ -10,6 +10,26 @@ selfmodel is not a framework. It's a **living system** where AI agents design, i
 
 ## Quick Start
 
+### Option A: Install as Claude Code Skill (recommended)
+
+```bash
+git clone https://github.com/VictorVVedtion/selfmodel.git
+cd selfmodel && bash install.sh
+```
+
+Then in Claude Code:
+
+```
+/selfmodel:init          # Initialize selfmodel in your project
+/selfmodel:plan          # Create a multi-phase orchestration plan
+/selfmodel:sprint        # Create and dispatch a Sprint
+/selfmodel:review        # Review a delivered Sprint
+/selfmodel:loop          # Auto-orchestration: plan → dispatch → review → merge → repeat
+/selfmodel:status        # View team status and quality trends
+```
+
+### Option B: Use the CLI directly
+
 ```bash
 # Initialize selfmodel in an existing project (auto-detects tech stack)
 bash scripts/selfmodel.sh adapt
@@ -22,6 +42,10 @@ bash scripts/selfmodel.sh update
 
 # Show team health dashboard
 bash scripts/selfmodel.sh status
+
+# Any subcommand supports --help
+bash scripts/selfmodel.sh init --help
+bash scripts/selfmodel.sh update --help
 ```
 
 Requires: `jq` (`brew install jq` on macOS, `apt install jq` on Linux)
@@ -70,6 +94,37 @@ Inspired by [Anthropic's Harness Design](https://www.anthropic.com/engineering/h
               └───────────────┘
 ```
 
+### Full Pipeline
+
+```
+Sprint contract
+     │
+     ▼
+Agent (worktree)  ─── fix → verify → commit (atomic)
+     │
+     ▼
+┌────────────────────────────┐
+│ Quick Scan (10 auto-reject │
+│ triggers on git diff)      │
+└────────────┬───────────────┘
+             │ pass
+     ┌───────┴───────┐
+     ▼               ▼
+Evaluator         E2E Agent v2
+(code quality)    (runtime AC verification)
+     │               │
+     └───────┬───────┘
+             ▼
+      Merge verdicts
+             │
+             ▼ (optional, user-facing sprints)
+      🌊 /rampage
+      (chaos testing: 7 personas × 4 surface engines)
+             │
+             ▼
+      Final verdict → ACCEPT / REVISE / REJECT
+```
+
 ### Seven-Role Team
 
 | Role | Agent | Model | Responsibility |
@@ -100,6 +155,63 @@ Inspired by [Anthropic's Harness Design](https://www.anthropic.com/engineering/h
 - **E2E atomic verification (v2)** — E2E Agent v2 uses acceptance criteria as the atomic unit of verification. Each AC from the sprint contract becomes one atomic verification with one command, one expected result, and one piece of evidence. Implicit ACs (build, tests, security) are auto-generated. Dependencies between atoms enable precise root-cause identification: if build fails, downstream AC atoms are BLOCKED (not FAIL). Supports flaky detection, historical delta, and artifact management.
 - **CLAUDE.md in English** — System instructions in English for higher LLM compliance (~3-4%); user interaction in Chinese via `<interaction_protocol>` tag.
 - **Self-evolution** — Every 10 sprints: MEASURE → DIAGNOSE → PROPOSE → EXPERIMENT → EVALUATE → SELECT. Hook interception logs feed into evolution analysis.
+- **Chaos testing (/rampage)** — "Be Water" philosophy. 4 surface engines (WEB, CLI, API, LIB) × 7 user personas (Impatient, Confused, Explorer, Multitasker, Edge Case, Abandoner, Speedrunner). Maps all user journeys, then walks each with chaotic behaviors. Advisory quality gate after E2E pass.
+
+## Chaos Testing: /rampage
+
+`/rampage` is a standalone Claude Code skill that acts as the most chaotic, boundary-pushing user imaginable. It finds bugs that systematic QA never catches: race conditions, state corruption, navigation traps, input edge cases.
+
+### Philosophy: Be Water
+
+Water doesn't care about the shape of the container. Web pages, CLI tools, API endpoints, SDK libraries... water penetrates everything. It finds every crack.
+
+### Four Surface Engines
+
+| Engine | Target | Cartography | Chaos Behaviors |
+|--------|--------|-------------|-----------------|
+| 🌐 WEB | Web apps | Browse daemon crawl → journey graph | Navigation, input, timing, state, viewport, keyboard chaos |
+| ⌨️ CLI | CLI tools | `--help` parsing → command tree | Argument, stdin, signal, environment, file, concurrency chaos |
+| 🔌 API | HTTP endpoints | OpenAPI/source scan → endpoint map | Request, auth, concurrency, path, data chaos |
+| 📦 LIB | Libraries/SDKs | Export scan → public API map | Parameter, lifecycle, concurrency, resource, error chaos |
+
+### Seven User Personas
+
+| # | Persona | Drive | Example behaviors |
+|---|---------|-------|-------------------|
+| ⚡ | The Impatient | Speed over correctness | Rage-clicks, Ctrl+C, doesn't wait |
+| 😵 | The Confused | Misunderstands everything | Wrong fields, back-as-undo, wrong flags |
+| 🔍 | The Explorer | Boundary curiosity | Tries /admin, every --help, URL manipulation |
+| 🔀 | The Multitasker | Everything in parallel | Multi-tab forms, concurrent commands, race conditions |
+| 💥 | The Edge Case | Extreme data | Emoji, 10MB stdin, MAX_INT, null bytes |
+| 🚪 | The Abandoner | Never finishes | Ctrl+C mid-operation, no cleanup, half-filled forms |
+| 🏃 | The Speedrunner | Minimum viable | Keyboard-only, skip optional, minimal args |
+
+### Usage
+
+```bash
+# Auto-detect surfaces in current project
+/rampage
+
+# Test a specific web app
+/rampage https://myapp.com
+
+# Test a CLI tool
+/rampage myctl
+
+# Test with specific options
+/rampage --intensity berserk --budget 20m --persona confused,explorer
+
+# Integration with selfmodel workflow
+/rampage --selfmodel    # Writes verdict to .selfmodel/artifacts/
+```
+
+### Output: Resilience Report
+
+Produces a scored report (0-100) with per-dimension breakdown, journey coverage map, findings by persona, and recommended action. Reports saved to `.gstack/rampage-reports/`.
+
+### Selfmodel Integration
+
+Rampage integrates as an optional chaos gate in the selfmodel pipeline (Step 6.5 in orchestration loop, Step 4.7 in quality gates). RAMPAGE FAIL with critical issues upgrades ACCEPT → REVISE.
 
 ## Project Structure
 
@@ -115,7 +227,11 @@ selfmodel/
 │       └── enforce-agent-rules.sh     # Require contract + inbox before agent calls
 ├── .claude/
 │   └── settings.json                  # Hooks configuration
+├── install.sh                         # Skill installer (→ ~/.claude/skills/)
+├── uninstall.sh                       # Skill uninstaller
 ├── .gitignore
+├── .gstack/
+│   └── rampage-reports/               # /rampage chaos test reports
 └── .selfmodel/
     ├── contracts/                     # Sprint contracts (audit trail)
     │   ├── active/                    # Current sprints
@@ -135,6 +251,7 @@ selfmodel/
     │   ├── orchestration.log          # Orchestration loop event log
     │   ├── hook-intercepts.log        # Auto-learned hook interception events
     │   └── evolution.jsonl            # Evolution log
+    ├── artifacts/                     # Verification artifacts (E2E + Rampage)
     ├── reviews/                       # Review records
     └── playbook/                      # On-demand loaded rules
         ├── dispatch-rules.md          # Routing matrix + CLI templates
@@ -152,16 +269,29 @@ selfmodel/
 ## Sprint Workflow
 
 ```
-1. Researcher investigates  → .selfmodel/inbox/research/sprint-N-query.md (if unknown domain)
-2. Leader writes contract   → .selfmodel/contracts/active/sprint-N.md
-3. Leader writes task file  → .selfmodel/inbox/<agent>/sprint-N.md
-4. Create worktree          → git worktree add sprint-N-<agent>
-5. Agent executes           → isolated, non-interactive, timeout-protected
-6. Leader quick scan        → 10 auto-reject triggers on git diff
-7. Parallel review          → Evaluator (code quality) + E2E Agent v2 (atomic AC verification)
-8. Leader merges verdicts   → E2E FAIL upgrades ACCEPT→REVISE; build FAIL→REJECT; blocker regression→REVISE
-9. Leader acts on verdict   → ≥7.0 merge | 5.0-6.9 revise | <5.0 reject & redo
+ 1. Researcher investigates   → .selfmodel/inbox/research/sprint-N-query.md (if unknown domain)
+ 2. Leader writes contract    → .selfmodel/contracts/active/sprint-N.md
+ 3. Leader writes task file   → .selfmodel/inbox/<agent>/sprint-N.md
+ 4. Create worktree           → git worktree add sprint-N-<agent>
+ 5. Agent executes            → isolated, non-interactive, timeout-protected
+ 6. Leader quick scan         → 10 auto-reject triggers on git diff
+ 7. Parallel review           → Evaluator (code quality) + E2E Agent v2 (runtime verification)
+ 8. Leader merges verdicts    → E2E FAIL upgrades ACCEPT→REVISE; build FAIL→REJECT
+ 9. Chaos gate (optional)     → /rampage --selfmodel (if Sprint has user-facing surfaces)
+10. Leader acts on verdict    → ≥7.0 merge | 5.0-6.9 revise | <5.0 reject & redo
 ```
+
+### Orchestration Loop (/selfmodel:loop)
+
+For large projects with 10+ Sprints, the automated orchestration loop handles the entire lifecycle:
+
+```
+plan.md → find executable sprints → dispatch agents (parallel)
+    → wait → evaluate + E2E (parallel) → rampage (optional)
+    → merge verdicts → act → checkpoint → phase gate → loop
+```
+
+Create a plan with `/selfmodel:plan`, then start the loop with `/selfmodel:loop`. The loop runs until all sprints are MERGED or BLOCKED. Phase boundaries trigger forced context resets.
 
 ## Hooks Enforcement
 
@@ -203,6 +333,46 @@ Every deliverable scored on 5 dimensions (see `playbook/quality-gates.md`):
 **Verdict**: ≥7.0 Accept | 5.0–6.9 Revise | <5.0 Reject & redo
 
 **Diff-aware review**: Evaluator receives only the files listed in Deliverables, not full diff. Peripheral changes are noted but don't drive scoring.
+
+## CLI Reference
+
+### selfmodel.sh
+
+```
+selfmodel init [directory]              Create new selfmodel project
+selfmodel adapt [directory]             Adapt to existing project (non-destructive)
+selfmodel update [--remote] [--version] Update playbook to latest version
+selfmodel status                        Show team health dashboard
+selfmodel version                       Show version
+selfmodel --help                        Show help
+```
+
+All subcommands support `--help` for detailed usage.
+
+### Claude Code Slash Commands
+
+| Command | Description |
+|---------|-------------|
+| `/selfmodel:init` | Initialize selfmodel in current project |
+| `/selfmodel:plan` | Create or update a multi-phase orchestration plan |
+| `/selfmodel:sprint` | Create a Sprint contract and dispatch an agent |
+| `/selfmodel:review` | Review a delivered Sprint (Quick Scan + Evaluator + E2E + verdict) |
+| `/selfmodel:loop` | Auto-orchestration loop (plan → dispatch → review → merge → repeat) |
+| `/selfmodel:status` | View team status, active sprints, and quality trends |
+| `/rampage` | Chaos testing: map all user journeys, walk each with chaotic personas |
+
+### Install / Uninstall
+
+```bash
+# Install as Claude Code skill
+git clone https://github.com/VictorVVedtion/selfmodel.git
+cd selfmodel && bash install.sh
+
+# Uninstall
+bash uninstall.sh
+```
+
+Backups stored in `~/.claude/.backups/` (not in skills directory).
 
 ## Iron Rules
 
