@@ -90,6 +90,7 @@ Claude Code 的自动 compaction 会压缩历史消息，但：
 | 质量评分 | `state/quality.jsonl` |
 | 未完成工作 | `contracts/active/` |
 | 关键约束 | CLAUDE.md 或 playbook/ |
+| Rampage 韧性报告 | `.gstack/rampage-reports/` + `.selfmodel/artifacts/rampage-sprint-*.json` |
 
 **原则**: 如果一条信息在 context reset 后会丢失且无法从文件系统恢复，它必须立即被外部化。
 

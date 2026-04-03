@@ -112,6 +112,20 @@ LOOP:
         - Evaluator REVISE + E2E FAIL → final REVISE (merge both must_fix + E2E blocking_failures, see quality-gates.md Step 4.5)
         - FLAKY atoms do not affect verdict (recorded in flaky_report)
 
+  6.5. OPTIONAL: CHAOS VERIFICATION (Rampage)
+       IF final verdict == ACCEPT
+       AND sprint has user-facing surfaces (WEB/CLI/API/LIB deliverables):
+         a. Dispatch: /rampage --selfmodel --budget 5m <target>
+            (target auto-detected from sprint deliverables)
+         b. Parse rampage artifact: .selfmodel/artifacts/rampage-sprint-<N>.json
+         c. Merge with verdict (per quality-gates.md Step 4.7):
+            - RAMPAGE PASS → no change
+            - RAMPAGE PASS_WITH_CONCERNS → ACCEPT + record suggestions
+            - RAMPAGE FAIL (critical) → upgrade ACCEPT to REVISE
+       Note: This step is advisory. Leader decides whether to dispatch based on
+       Sprint content and project maturity. Skip for internal tools, config changes,
+       documentation-only sprints.
+
   7. ACT on each verdict
      - ACCEPT → merge, archive contract, cleanup worktree
                  plan.md Status → MERGED

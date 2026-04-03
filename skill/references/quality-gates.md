@@ -143,6 +143,31 @@ Evaluator 返回 JSON verdict（schema 见 evaluator-prompt.md）。
 4. 如果 E2E FAIL 导致升级（ACCEPT → REVISE），将 `blocking_failures` 作为额外 `must_fix` 项写入 feedback
 5. 详细协议见 `e2e-protocol-v2.md`
 
+### Step 4.7: Rampage Verdict 合并（可选混沌关卡）
+
+如果当前 Sprint 有用户交互面（WEB/CLI/API/LIB）且 E2E 已 PASS，Leader 可选派发 `/rampage --selfmodel`：
+
+1. Rampage 自动探测 Sprint 的 surface 类型，执行混沌渗透测试
+2. 输出 `.selfmodel/artifacts/rampage-sprint-<N>.json`（含韧性分数 + per-surface 结果 + verdict）
+3. 按以下规则合并到最终 verdict：
+
+| 当前 Verdict | Rampage | 最终 | 理由 |
+|-------------|---------|------|------|
+| ACCEPT | PASS (≥80, 0 critical) | ACCEPT | 混沌验证通过 |
+| ACCEPT | PASS_WITH_CONCERNS (≥60, 0 critical) | ACCEPT + 建议 | 非阻塞性混沌发现，记录到 should_fix |
+| ACCEPT | FAIL (critical > 0 OR <60) | REVISE | Critical 混沌发现阻塞合并 |
+| REVISE | 任何 | REVISE | 已在修改中，rampage 发现加入 must_fix |
+| REJECT | 任何 | REJECT | 代码质量太差，混沌测试无意义 |
+
+4. Rampage FAIL 导致升级时，将 `blocking_issues` 写入 feedback 的 must_fix
+5. Rampage 是 **advisory 关卡**：Leader 可基于上下文覆盖（如 Sprint 仅涉及内部工具函数，混沌韧性要求可降低）
+
+**派发条件**: Leader 自主判断。推荐在以下场景派发:
+- Sprint 交付物包含 Web 页面/组件
+- Sprint 交付物包含 CLI 命令/子命令
+- Sprint 交付物包含 API 端点
+- Sprint 交付物包含 public SDK/库接口
+
 ### Step 5: 判定（Leader 机械执行）
 
 加权平均: `weighted = func×0.30 + quality×0.25 + taste×0.20 + complete×0.15 + original×0.10`
@@ -299,7 +324,7 @@ REVISE 或 REJECT 时写入 `.selfmodel/reviews/sprint-<N>-review.md`：
 
 每次审查追加到 `.selfmodel/state/quality.jsonl`：
 ```json
-{"sprint":1,"agent":"gemini","evaluator":"opus-agent","scores":{"func":8,"quality":7,"taste":6,"complete":9,"original":7},"weighted":7.4,"verdict":"accept","leader_override":null,"e2e_agent":"opus-agent","e2e_verdict":"PASS","e2e_atoms":{"total":9,"passed":7,"failed":0,"flaky":1,"blocked":1,"explicit_pass":"4/5","implicit_pass":"4/4"},"e2e_change_profile":"backend_only","e2e_depth":"standard","e2e_regressions":0,"final_verdict":"accept","ts":"2026-03-28T12:00:00Z"}
+{"sprint":1,"agent":"gemini","evaluator":"opus-agent","scores":{"func":8,"quality":7,"taste":6,"complete":9,"original":7},"weighted":7.4,"verdict":"accept","leader_override":null,"e2e_agent":"opus-agent","e2e_verdict":"PASS","e2e_atoms":{"total":9,"passed":7,"failed":0,"flaky":1,"blocked":1,"explicit_pass":"4/5","implicit_pass":"4/4"},"e2e_change_profile":"backend_only","e2e_depth":"standard","e2e_regressions":0,"rampage_dispatched":false,"rampage_verdict":null,"rampage_resilience":null,"rampage_surfaces":[],"final_verdict":"accept","ts":"2026-03-28T12:00:00Z"}
 ```
 
 ---

@@ -61,6 +61,13 @@
 - Notes: <可选，额外验证重点>
 （v2 协议：Agent 自主分析 diff + 验收标准生成验证策略，Leader 无需手写场景）
 
+## Chaos Gate（可选 — Sprint 有用户交互面时填写）
+- Surfaces: web | cli | api | lib | auto
+- Intensity: gentle | standard | berserk
+- Budget: 5m
+- Threshold: resilience >= 70
+（Leader 在 E2E PASS 后可选派发 `/rampage --selfmodel`，详见 quality-gates.md Step 4.7）
+
 ## Cost (Leader 填写，Sprint 完成后)
 - Tokens: <estimated total, e.g. 125k input + 38k output>
 - Duration: <wall clock time, e.g. 4m 32s>
