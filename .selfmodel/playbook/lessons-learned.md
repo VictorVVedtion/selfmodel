@@ -58,6 +58,17 @@ Leader 每 10 sprint 审查 hook-intercepts.log，提取有价值的经验升级
   - CLAUDE.md: Iron Rules 新增 No Blind Merge
 - **Result**: 待验证
 
+### Sprint 65-78 (vibe-sensei): 分支脱离 main 成为事实主线
+- **Category**: architecture
+- **Lesson**: Leader 在某个时刻 checkout 到了 worktree 分支上工作，后续所有 Sprint 都在这个分支上积累。main 被遗忘在 92 commits 之前。worktree 之间直接合并（`Merge worktree-A into worktree-B`），main 作为唯一真相源的约束被打破。最终导致两条平行线、47K 行差异、无法轻松合并。
+- **Action**: 三条新 Iron Rule：
+  - Rule 14 **Main Is Truth**: Leader 必须始终在 main 上，所有 merge 只能 target main
+  - Rule 15 **Short-Lived Branches**: worktree 分支必须在同 session 内 merge 或 discard
+  - Rule 16 **No Orphan Work**: DELIVERED 分支必须先 merge 才能 fork 新的
+  - orchestration-loop.md 新增 Step 0 Pre-Flight Check
+  - Session Start/End Protocol 强化为 mandatory cleanup
+- **Result**: 待验证
+
 ### Sprint 65-76: K 线图技术选型走弯路
 - **Category**: dispatch
 - **Lesson**: 从 Lightweight Charts → 各种配置 → TradingView Charting Library，走了多个 Sprint 的弯路。根因：实现前未先派 Researcher 做技术选型

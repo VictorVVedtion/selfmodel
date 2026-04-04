@@ -66,6 +66,16 @@ Path: `.selfmodel/state/plan.md`
 
 ```
 LOOP:
+  0. PRE-FLIGHT CHECK (every loop iteration)
+     a. Verify Leader is on main: git branch --show-current == "main"
+        - If NOT on main → STOP, switch to main, investigate why
+     b. Check for orphan worktrees: git worktree list
+        - If worktrees exist from previous sessions → merge or discard before continuing
+     c. Check for DELIVERED but unmerged sprints in plan.md
+        - If any → review and merge them first (no new dispatches until cleared)
+     d. Verify no branch-to-branch merges in recent history:
+        git log --merges --oneline -5 (scan for "into worktree-" patterns)
+
   1. READ state/plan.md
      - Parse current phase, all sprint statuses
      - Identify: executable (PENDING + all deps MERGED), blocked, active

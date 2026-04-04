@@ -26,6 +26,9 @@ Only code, CLI commands, and file content may be in English.
 11. **Small Batch** — Each agent task completes in 30-60 seconds. Timeout → retry → escalate.
 12. **Efficiency First** — Parallelize everything with no dependencies. Dispatch multiple agents simultaneously. Maximize throughput.
 13. **No Blind Merge** — NEVER use `--theirs` or `--ours` to resolve merge conflicts without understanding both sides. ALWAYS rebase onto latest main before merge. Merge MUST be serial (one at a time). Post-merge smoke test MUST pass. See `dispatch-rules.md` Rebase-Then-Merge.
+14. **Main Is Truth** — Leader MUST stay on main at all times. ALL merges target main. NEVER merge branch-to-branch. If `git branch --show-current` ≠ main, stop and fix before doing anything else.
+15. **Short-Lived Branches** — Worktree branches MUST be merged or discarded within the same session. No branch survives across sessions. Session end checklist: `git worktree list` must show only the main worktree.
+16. **No Orphan Work** — Every Sprint that reaches DELIVERED must be reviewed and merged (or rejected) before starting new Sprints. Never leave DELIVERED branches unmerged while forking new ones.
 
 ### Leader Decision Principles
 
@@ -151,6 +154,18 @@ Independent tasks MUST be dispatched in parallel:
 
 ALL agents work in isolated worktrees. Main branch stays clean. ALWAYS.
 
+### Pre-Flight Check (every session start, every dispatch)
+
+```bash
+# Leader MUST be on main. If not, STOP.
+[ "$(git branch --show-current)" = "main" ] || echo "DANGER: not on main!"
+
+# No orphan worktrees from previous sessions
+git worktree list  # must show only main worktree
+```
+
+### Sprint Lifecycle
+
 ```
 1. Write contract → .selfmodel/contracts/active/sprint-<N>.md
    Write task    → .selfmodel/inbox/<agent>/sprint-<N>.md
@@ -159,16 +174,16 @@ ALL agents work in isolated worktrees. Main branch stays clean. ALWAYS.
    Compare deliverables file lists across parallel sprints
    Overlap detected → merge into one Sprint OR serialize
 
-3. Create worktree
+3. Create worktree (from latest main HEAD)
    /git-worktree add sprint-<N>-<agent> -b sprint/<N>-<agent>
    → Path: ../.zcf/selfmodel/sprint-<N>-<agent>/
 
 4. Agent executes in worktree (fully isolated)
 
-5. Leader reviews: git diff main...sprint/<N>-<agent>
+5. Leader reviews ON MAIN: git diff main...sprint/<N>-<agent>
 
 6. Verdict (SERIAL MERGE — one Sprint at a time)
-   Pass  → rebase onto latest main → merge → post-merge smoke test → archive
+   Pass  → rebase onto latest main → merge to main → post-merge smoke test → archive
    Fail  → write feedback → agent continues in same worktree
 
    Rebase-then-merge flow (see dispatch-rules.md for full details):
@@ -176,7 +191,18 @@ ALL agents work in isolated worktrees. Main branch stays clean. ALWAYS.
    b. If conflict → Agent resolves (has context) | Leader reviews manually
    c. cd <main-repo> && git merge sprint/<N>-<agent> --no-ff
    d. Post-merge: build + test must pass, else git revert + REVISE
+
+7. Cleanup (MANDATORY — same session)
+   /git-worktree remove sprint-<N>-<agent>
+   git branch -d sprint/<N>-<agent>
 ```
+
+### Absolute Prohibitions
+
+- **NEVER merge branch-to-branch** — ALL merges target main only
+- **NEVER checkout a worktree branch as Leader** — Leader stays on main
+- **NEVER leave branches across sessions** — merge or discard before session end
+- **NEVER start new Sprints with DELIVERED branches pending** — merge first
 
 **Opus Agent special case**: Uses Agent tool + `isolation: "worktree"`, auto-manages worktree
 
@@ -229,7 +255,10 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 2. Read .selfmodel/state/next-session.md (last handoff)
 3. Read .selfmodel/state/team.json (team state)
 4. Scan .selfmodel/contracts/active/ (pending contracts)
-5. git worktree list (check residual worktrees)
+5. PRE-FLIGHT CHECK:
+   a. git branch --show-current → MUST be "main", else STOP and fix
+   b. git worktree list → MUST show only main, else merge/discard orphan branches
+   c. Scan plan.md for DELIVERED status → merge before dispatching new work
 ```
 
 ### Session End Protocol
@@ -238,7 +267,12 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 1. Update .selfmodel/state/team.json
 2. Write .selfmodel/state/next-session.md (progress + pending + suggestions)
 3. Archive completed contracts → contracts/archive/
-4. Cleanup merged worktrees
+4. MANDATORY CLEANUP (no exceptions):
+   a. All DELIVERED sprints → reviewed and merged (or rejected)
+   b. git worktree list → remove ALL agent worktrees
+   c. git branch --list "sprint/*" "worktree-*" → delete ALL merged branches
+   d. git branch --show-current → confirm still on main
+   e. If ANY branch cannot be merged/discarded → document in next-session.md as BLOCKER
 ```
 
 ### Context Health Rules
