@@ -204,8 +204,55 @@ Skill tool:
 | 路径 | `../.zcf/selfmodel/sprint-<N>-<agent>/` |
 | 列表 | `git worktree list` |
 | 审 diff | `git diff main...sprint/<N>-<agent>` |
-| 合并 | `git merge sprint/<N>-<agent> --no-ff -m "Sprint <N>: <title>"` |
+| 合并 | 见下方 Rebase-Then-Merge 流程 |
 | 清理 | `/git-worktree remove sprint-<N>-<agent>` |
+
+### Rebase-Then-Merge 流程（Iron Rule）
+
+**绝对禁止**: 直接 `git merge` 不经 rebase。
+**绝对禁止**: 用 `--theirs` 或 `--ours` 盲目解决冲突。
+
+```bash
+# Step 1: 在 worktree 中 rebase 到最新 main
+cd <worktree-path>
+git rebase main
+
+# Step 2: rebase 冲突处理
+#   → Agent 在 worktree 中解决（Agent 有完整任务上下文）
+#   → 如 Agent 已退出：Leader 逐文件手动审查，理解两侧意图后决定
+#   → 绝不盲目 --theirs / --ours
+
+# Step 3: rebase 成功后，回 main merge（此时是 clean merge）
+cd /Users/vvedition/Desktop/selfmodel
+git merge sprint/<N>-<agent> --no-ff -m "Sprint <N>: <title>"
+
+# Step 4: Post-merge smoke test（见 orchestration-loop.md Step 7.5）
+```
+
+### 冲突解决优先级
+
+| 优先级 | 策略 | 适用场景 |
+|--------|------|----------|
+| 1 | Agent rebase 解决 | Agent 有上下文，知道两侧代码意图 |
+| 2 | Leader 手动审查 | 逐文件、逐 hunk 决定保留哪侧 |
+| 3 | 拆分 Sprint | 文件重叠太多，合并为一个 Sprint 或串行执行 |
+| 4 | `--theirs` / `--ours` | **仅当** Leader 确认另一侧变更可丢弃时 |
+
+### 并行 Sprint 串行 Merge 规则
+
+多个 Sprint 可并行执行（提高效率），但 **merge 必须串行**：
+
+```
+并行派发: Sprint 65 + Sprint 66 + Sprint 67
+并行评审: Evaluator 同时评审三个
+
+串行合并（按 Sprint 编号顺序）:
+  1. Sprint 65 rebase onto main HEAD → merge → main 前进
+  2. Sprint 66 rebase onto 新 main HEAD → merge → main 再前进
+  3. Sprint 67 rebase onto 最新 main HEAD → merge
+```
+
+**关键**: 每次 merge 后，后续待 merge 的分支必须先 rebase 到新的 main HEAD。
 
 ---
 

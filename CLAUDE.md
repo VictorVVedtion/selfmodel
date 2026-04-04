@@ -25,6 +25,7 @@ Only code, CLI commands, and file content may be in English.
 10. **No Interactive** — All commands: `CI=true GIT_TERMINAL_PROMPT=0 timeout <N> <cmd>`. Zero interactive prompts allowed. Do NOT use `yes |` (causes E2BIG).
 11. **Small Batch** — Each agent task completes in 30-60 seconds. Timeout → retry → escalate.
 12. **Efficiency First** — Parallelize everything with no dependencies. Dispatch multiple agents simultaneously. Maximize throughput.
+13. **No Blind Merge** — NEVER use `--theirs` or `--ours` to resolve merge conflicts without understanding both sides. ALWAYS rebase onto latest main before merge. Merge MUST be serial (one at a time). Post-merge smoke test MUST pass. See `dispatch-rules.md` Rebase-Then-Merge.
 
 ### Leader Decision Principles
 
@@ -154,17 +155,27 @@ ALL agents work in isolated worktrees. Main branch stays clean. ALWAYS.
 1. Write contract → .selfmodel/contracts/active/sprint-<N>.md
    Write task    → .selfmodel/inbox/<agent>/sprint-<N>.md
 
-2. Create worktree
+2. File Overlap Check (parallel sprints only)
+   Compare deliverables file lists across parallel sprints
+   Overlap detected → merge into one Sprint OR serialize
+
+3. Create worktree
    /git-worktree add sprint-<N>-<agent> -b sprint/<N>-<agent>
    → Path: ../.zcf/selfmodel/sprint-<N>-<agent>/
 
-3. Agent executes in worktree (fully isolated)
+4. Agent executes in worktree (fully isolated)
 
-4. Leader reviews: git diff main...sprint/<N>-<agent>
+5. Leader reviews: git diff main...sprint/<N>-<agent>
 
-5. Verdict
-   Pass  → git merge sprint/<N>-<agent> → archive contract → cleanup worktree
+6. Verdict (SERIAL MERGE — one Sprint at a time)
+   Pass  → rebase onto latest main → merge → post-merge smoke test → archive
    Fail  → write feedback → agent continues in same worktree
+
+   Rebase-then-merge flow (see dispatch-rules.md for full details):
+   a. cd <worktree> && git rebase main
+   b. If conflict → Agent resolves (has context) | Leader reviews manually
+   c. cd <main-repo> && git merge sprint/<N>-<agent> --no-ff
+   d. Post-merge: build + test must pass, else git revert + REVISE
 ```
 
 **Opus Agent special case**: Uses Agent tool + `isolation: "worktree"`, auto-manages worktree

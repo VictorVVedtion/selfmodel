@@ -329,6 +329,37 @@ REVISE 或 REJECT 时写入 `.selfmodel/reviews/sprint-<N>-review.md`：
 
 ---
 
+## Post-Merge Regression Gate
+
+每次 merge 后的回归验证。防止后 merge 的 Sprint 覆盖先 merge 的修复。
+
+### 触发时机
+
+- orchestration-loop.md Step 7.5（每次 ACCEPT merge 后立即执行）
+
+### 验证内容
+
+| 检查项 | 命令 | 失败阈值 |
+|--------|------|----------|
+| Build 完整性 | `npm run build` / `cargo build` | 任何编译错误 |
+| 测试回归 | `npm test -- --bail` / `cargo test` | 任何测试失败 |
+| 变更范围 | `git diff HEAD~1 --stat` | 变更文件数远超 Sprint deliverables |
+
+### 失败处理
+
+1. `git revert HEAD --no-edit` — 回滚 merge commit
+2. Sprint 状态从 MERGED 回退到 REVISE
+3. 写入 feedback：`Post-merge regression: <具体错误>`
+4. Agent 在 worktree 中修复，重新 rebase，重新 merge
+
+### 为什么需要这个 Gate
+
+Sprint 65-76 教训：多个并行 Sprint merge 时，`--theirs` 冲突解决策略导致先 merge 的修复被覆盖。
+Quality Gates Step 1-6 只验证 Sprint 自身质量，不验证 merge 后的系统完整性。
+此 Gate 填补了"merge 后回归"的验证空白。
+
+---
+
 ## 日志维护
 
 | 文件 | 轮转策略 | 理由 |

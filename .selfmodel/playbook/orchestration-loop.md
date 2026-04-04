@@ -79,7 +79,17 @@ LOOP:
      - No executable AND some not MERGED → BLOCKED, report to user
 
   4. PARALLEL DISPATCH (sprints with no mutual dependencies)
-     For each executable sprint:
+
+     FILE OVERLAP CHECK (before dispatch):
+     a. For each pair of executable sprints, compare Deliverables file lists
+     b. If two sprints share ANY deliverable file → FILE_OVERLAP detected
+     c. FILE_OVERLAP resolution (priority order):
+        1. Merge into single Sprint (cleanest — no conflict possible)
+        2. Declare file dependency, serialize execution (sprint with lower N goes first)
+        3. Mark FILE_OVERLAP in plan.md, ensure serial merge order
+     d. Only sprints with ZERO file overlap may be dispatched in parallel
+
+     For each executable sprint (after overlap check):
      a. Read sprint-template.md, write contract → contracts/active/sprint-<N>.md
      b. Write task → inbox/<agent>/sprint-<N>.md
      c. Create worktree (or use Agent tool isolation)
@@ -126,14 +136,37 @@ LOOP:
        Sprint content and project maturity. Skip for internal tools, config changes,
        documentation-only sprints.
 
-  7. ACT on each verdict
-     - ACCEPT → merge, archive contract, cleanup worktree
-                 plan.md Status → MERGED
+  7. ACT on each verdict (SERIAL MERGE — one at a time, in Sprint number order)
+     - ACCEPT →
+         a. Rebase sprint branch onto current main HEAD (in worktree):
+            cd <worktree-path> && git rebase main
+         b. If rebase conflict:
+            - Re-dispatch Agent to resolve in worktree (Agent has task context)
+            - If Agent unavailable: Leader resolves manually per file
+            - NEVER use --theirs / --ours blindly
+         c. After clean rebase: merge into main
+            cd <main-repo> && git merge sprint/<N>-<agent> --no-ff -m "Sprint <N>: <title>"
+         d. Archive contract, cleanup worktree
+         e. plan.md Status → MERGED
      - REVISE → write must_fix feedback, agent continues
                  plan.md Status → ACTIVE (retry count +1)
      - REJECT → discard branch
                  plan.md Status → PENDING (redo)
                  If 3 consecutive REJECTs → Status → BLOCKED, notify user
+
+  7.5. POST-MERGE SMOKE TEST (after each merge in Step 7)
+       Run within 30 seconds:
+       a. Build check (if applicable):
+          npm run build 2>&1 | tail -5  OR  cargo build 2>&1 | tail -5
+       b. Test check (if applicable):
+          npm test -- --bail 2>&1 | tail -10  OR  cargo test 2>&1 | tail -10
+       c. Diff sanity:
+          git diff HEAD~1 --stat  (verify change scope matches Sprint deliverables)
+       d. If build OR test fails:
+          - git revert HEAD --no-edit  (revert the merge commit)
+          - Sprint status → REVISE (not MERGED)
+          - Write feedback: "Post-merge regression detected: <error>"
+          - Agent must fix in worktree, re-rebase, re-merge
 
   8. CHECKPOINT
      - Write next-session.md (current phase + completed sprints + pending)
