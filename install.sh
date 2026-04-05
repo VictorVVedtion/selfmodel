@@ -49,10 +49,31 @@ chmod +x "${SKILL_DIR}/scripts/"*.sh 2>/dev/null || true
 SKILL_COUNT=$(find "${SKILL_DIR}" -type f | wc -l | tr -d ' ')
 CMD_COUNT=$(find "${CMD_DIR}" -type f | wc -l | tr -d ' ')
 
+# Install CLI to PATH
+CLI_SRC="${SRC_DIR}/scripts/selfmodel.sh"
+CLI_TARGET="/usr/local/bin/selfmodel"
+if [[ -f "${CLI_SRC}" ]]; then
+    chmod +x "${CLI_SRC}"
+    if [[ -w "/usr/local/bin" ]]; then
+        ln -sf "${CLI_SRC}" "${CLI_TARGET}"
+        echo "CLI: selfmodel → ${CLI_TARGET}"
+    elif command -v sudo &>/dev/null; then
+        echo "Installing CLI to /usr/local/bin (may need password)..."
+        sudo ln -sf "${CLI_SRC}" "${CLI_TARGET}" 2>/dev/null && \
+            echo "CLI: selfmodel → ${CLI_TARGET}" || \
+            echo "Skipped CLI install (no sudo). Run manually: sudo ln -sf ${CLI_SRC} ${CLI_TARGET}"
+    else
+        echo "Skipped CLI install. Add to PATH manually:"
+        echo "  ln -sf ${CLI_SRC} /usr/local/bin/selfmodel"
+    fi
+fi
+
 echo ""
 echo "Done! ${SKILL_COUNT} skill files + ${CMD_COUNT} commands installed."
 echo ""
 echo "Commands: /selfmodel:init  /selfmodel:sprint  /selfmodel:review"
 echo "          /selfmodel:status  /selfmodel:plan  /selfmodel:loop"
+echo ""
+echo "CLI:      selfmodel init | update --remote | version | status"
 echo ""
 echo "Quick start: cd <your-project> && run /selfmodel:init in Claude Code"

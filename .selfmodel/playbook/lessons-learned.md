@@ -80,3 +80,17 @@ Leader 每 10 sprint 审查 hook-intercepts.log，提取有价值的经验升级
 - **Lesson**: inbox 任务文件给了 main 仓库的绝对路径作为 Context Files，Agent 直接编辑了 main 的文件而非 worktree 副本。Leader cp worktree→main 时覆盖了 Agent 的修改
 - **Action**: 未来 inbox 任务必须强调 "work within your worktree, translate absolute paths to worktree-relative paths"。Leader 合并产出时先 diff 确认内容在 worktree 中
 - **Result**: 改善 — 本次手动恢复，后续可避免
+
+### 11-Sprint Fan-Out Merge Hell（跨项目通用模式）
+- **Category**: architecture
+- **Lesson**: 11 个 Sprint 并行派发，6+ 个同时修改相同"收敛文件"（tools.ts, index.ts, types.ts 等注册表文件），导致串行合并时需要 10 次级联 rebase 冲突解决。六层根因：(1) 文件重叠检测是建议性文本，Leader 可跳过 (2) 无并行调度上限 — "MUST parallelize" 鼓励全量扇出 (3) "收敛文件"概念不存在 — 注册表文件和普通文件同等对待 (4) Rule 16 不够 — DELIVERED Sprint 同时到达时规则失效 (5) Sprint Files 列表是自由文本，重叠检测不可靠 (6) 无滚动批次概念 — 全部派发或逐个派发，没有中间态
+- **Action**: 首次引入代码级强制执行（hook），而非仅文档更新：
+  - 新建 `enforce-dispatch-gate.sh` PreToolUse hook — 三道硬门禁：并行上限（active contracts < max_parallel）、收敛文件门禁（同一热文件不得被多个 active Sprint 修改）、文件重叠检查（active Sprint 间不得有共享文件）。exit 2 拦截，无法绕过
+  - 新建 `.selfmodel/state/dispatch-config.json` — JSON 配置（max_parallel, convergence_files），shell 用 jq 确定性解析
+  - 新建 `scripts/verify-delivery.sh` — 交付后对比合约声明文件 vs 实际修改文件，发现未声明修改
+  - sprint-template.md 新增结构化 `## Files` 段（Creates/Modifies/Out of Scope），hook 自动解析
+  - orchestration-loop.md Step 4 重写为 "Rolling Batch Dispatch"（滚动批次：调度 3 → 合并 3 → 调度 3）
+  - dispatch-rules.md 新增 "收敛文件管理" 段，并行调度加三条硬约束
+  - CLAUDE.md 新增 Iron Rule 17 (Rolling Batch) 和 Rule 18 (Convergence File Gate)
+  - `.claude/settings.json` 注册新 hook 到 Bash matcher 链
+- **Result**: 待验证

@@ -32,6 +32,7 @@ Path: `.selfmodel/state/plan.md`
 - Status: PENDING | ACTIVE | DELIVERED | MERGED | REJECTED | BLOCKED
 - Priority: P0 | P1 | P2
 - Timeout: 60 | 120 | 180 | 300
+- Files: src/components/Button.tsx, src/components/Button.test.tsx
 
 ### Sprint 2: <Title>
 - Agent: opus
@@ -39,6 +40,7 @@ Path: `.selfmodel/state/plan.md`
 - Status: PENDING
 - Priority: P0
 - Timeout: 180
+- Files: src/tools.ts, src/exchange/index.ts
 
 ## Phase 1: <Phase Name>
 
@@ -51,6 +53,14 @@ Path: `.selfmodel/state/plan.md`
 - Status: PENDING
 - Priority: P0
 - Timeout: 120
+- Files: src/utils/helpers.ts
+
+## Convergence Files (多 Sprint 共触的热文件，强制串行)
+- src/tools.ts
+- src/exchange/index.ts
+
+## Dispatch Config
+- Max Parallel Sprints: 3
 ```
 
 ### Format Rules
@@ -59,6 +69,14 @@ Path: `.selfmodel/state/plan.md`
 - Phase is logical grouping. Sprints CAN have cross-phase dependencies.
 - Status updated by Leader only (single writer, no concurrency).
 - Gate: evaluated by Leader when all sprints in previous phase are MERGED.
+- Files: comma-separated file paths the Sprint will create or modify. MUST be populated before
+  dispatch. Used by `enforce-dispatch-gate.sh` hook for structural overlap detection and
+  convergence file gate. Freeform descriptions NOT acceptable — only concrete file paths.
+- Convergence Files: files appearing in 2+ Sprint Files lists. Touching the same convergence
+  file forces serialization — only one ACTIVE Sprint may modify it at a time. Leader identifies
+  these when creating plan.md. Also stored in `.selfmodel/state/dispatch-config.json` for hook.
+- Max Parallel Sprints: default 3. ACTIVE + DELIVERED count MUST NOT exceed this value.
+  Enforced by `enforce-dispatch-gate.sh` hook — dispatch is blocked at tool level if exceeded.
 
 ---
 
@@ -66,6 +84,16 @@ Path: `.selfmodel/state/plan.md`
 
 ```
 LOOP:
+  0. PRE-FLIGHT CHECK (every loop iteration)
+     a. Verify Leader is on main: git branch --show-current == "main"
+        - If NOT on main → STOP, switch to main, investigate why
+     b. Check for orphan worktrees: git worktree list
+        - If worktrees exist from previous sessions → merge or discard before continuing
+     c. Check for DELIVERED but unmerged sprints in plan.md
+        - If any → review and merge them first (no new dispatches until cleared)
+     d. Verify no branch-to-branch merges in recent history:
+        git log --merges --oneline -5 (scan for "into worktree-" patterns)
+
   1. READ state/plan.md
      - Parse current phase, all sprint statuses
      - Identify: executable (PENDING + all deps MERGED), blocked, active
@@ -78,13 +106,42 @@ LOOP:
      - All sprints MERGED → project complete, write final report
      - No executable AND some not MERGED → BLOCKED, report to user
 
-  4. PARALLEL DISPATCH (sprints with no mutual dependencies)
-     For each executable sprint:
+  4. ROLLING BATCH DISPATCH (capped, overlap-gated)
+
+     NOTE: Gates 1-3 are ENFORCED by enforce-dispatch-gate.sh hook.
+     Even if Leader skips this step, hook blocks dispatch at tool level.
+
+     Gate 1 — DISPATCH CAP:
+     a. Read Max Parallel Sprints from dispatch-config.json (default: 3)
+     b. current_inflight = count(contracts/active/*.md with ACTIVE or DELIVERED status)
+     c. available_slots = cap - current_inflight
+     d. available_slots <= 0 → merge existing sprints first, then dispatch
+
+     Gate 2 — CONVERGENCE FILE GATE:
+     a. Read convergence_files from dispatch-config.json
+     b. For each candidate sprint, check its Files list against convergence files
+     c. If candidate touches a convergence file AND any ACTIVE/DELIVERED sprint
+        also touches that same convergence file → candidate WAITS
+     d. Log: blocked_by=convergence_file in orchestration.log
+
+     Gate 3 — FILE OVERLAP CHECK (structural, enforced by hook):
+     a. For each pair of candidate sprints, compare Files lists
+     b. Shared file → merge into one Sprint or serialize (lower N first)
+     c. MANDATORY — hook will block dispatch if overlap detected
+
+     BATCH ASSEMBLY:
+     a. From eligible candidates (passed all gates), take up to available_slots
+     b. Sort: Priority (P0 first) → Sprint number (lower first)
+     c. Remaining eligible sprints wait for next loop iteration
+
+     For each sprint in batch:
      a. Read sprint-template.md, write contract → contracts/active/sprint-<N>.md
-     b. Write task → inbox/<agent>/sprint-<N>.md
-     c. Create worktree (or use Agent tool isolation)
-     d. Update plan.md: Status → ACTIVE
-     e. Dispatch agent per dispatch-rules.md
+        (contract MUST include structured ## Files section with Creates/Modifies)
+     b. Update dispatch-config.json convergence_files if new hot files identified
+     c. Write task → inbox/<agent>/sprint-<N>.md
+     d. Create worktree (or use Agent tool isolation)
+     e. Update plan.md: Status → ACTIVE
+     f. Dispatch agent per dispatch-rules.md
 
   5. WAIT for all dispatched agents
 
@@ -126,14 +183,37 @@ LOOP:
        Sprint content and project maturity. Skip for internal tools, config changes,
        documentation-only sprints.
 
-  7. ACT on each verdict
-     - ACCEPT → merge, archive contract, cleanup worktree
-                 plan.md Status → MERGED
+  7. ACT on each verdict (SERIAL MERGE — one at a time, in Sprint number order)
+     - ACCEPT →
+         a. Rebase sprint branch onto current main HEAD (in worktree):
+            cd <worktree-path> && git rebase main
+         b. If rebase conflict:
+            - Re-dispatch Agent to resolve in worktree (Agent has task context)
+            - If Agent unavailable: Leader resolves manually per file
+            - NEVER use --theirs / --ours blindly
+         c. After clean rebase: merge into main
+            cd <main-repo> && git merge sprint/<N>-<agent> --no-ff -m "Sprint <N>: <title>"
+         d. Archive contract, cleanup worktree
+         e. plan.md Status → MERGED
      - REVISE → write must_fix feedback, agent continues
                  plan.md Status → ACTIVE (retry count +1)
      - REJECT → discard branch
                  plan.md Status → PENDING (redo)
                  If 3 consecutive REJECTs → Status → BLOCKED, notify user
+
+  7.5. POST-MERGE SMOKE TEST (after each merge in Step 7)
+       Run within 30 seconds:
+       a. Build check (if applicable):
+          npm run build 2>&1 | tail -5  OR  cargo build 2>&1 | tail -5
+       b. Test check (if applicable):
+          npm test -- --bail 2>&1 | tail -10  OR  cargo test 2>&1 | tail -10
+       c. Diff sanity:
+          git diff HEAD~1 --stat  (verify change scope matches Sprint deliverables)
+       d. If build OR test fails:
+          - git revert HEAD --no-edit  (revert the merge commit)
+          - Sprint status → REVISE (not MERGED)
+          - Write feedback: "Post-merge regression detected: <error>"
+          - Agent must fix in worktree, re-rebase, re-merge
 
   8. CHECKPOINT
      - Write next-session.md (current phase + completed sprints + pending)
@@ -218,24 +298,33 @@ When all sprints in a phase reach MERGED:
 
 ---
 
-## Parallel Sprint Dispatch
+## Rolling Batch Dispatch
 
-Within a phase, sprints with no mutual dependencies dispatch in parallel:
+Within a phase, sprints dispatch in rolling batches — capped and overlap-gated:
 
 ```
-# Example: Phase 1 has Sprint 3 (no deps), Sprint 4 (no deps), Sprint 5 (deps: 3,4)
+# Cap=3. Sprint 4 和 6 都修改 src/tools.ts (convergence file).
 
-Batch 1 (parallel): dispatch Sprint 3 + Sprint 4
-Wait for both
-Evaluate both (serial or parallel if using different evaluator channels)
-Batch 2: dispatch Sprint 5 (now deps satisfied)
+Batch 1: dispatch Sprint 3, 4, 7 (3 slots, no overlap)
+  → Sprint 6 BLOCKED: shares convergence file src/tools.ts with Sprint 4 (ACTIVE)
+  → Sprint 8 BLOCKED: cap full (3 active)
+Wait → Sprint 3 DELIVERED → merge → 1 slot opens
+Batch 2: dispatch Sprint 5 (deps on Sprint 3, now MERGED)
+  → Sprint 6 still BLOCKED: Sprint 4 still ACTIVE, convergence file held
+Wait → Sprint 4 MERGED → convergence file released
+Batch 3: dispatch Sprint 6 (gate clear, slot available)
+Wait → all merge
+Batch 4: dispatch Sprint 8
 ```
 
-Parallel evaluation options:
-- Serial: Opus evaluates Sprint 3, then Sprint 4 (safer, simpler)
-- Parallel: Opus evaluates Sprint 3, Gemini evaluates Sprint 4 (faster, cross-model)
+Key principles:
+- **Cap enforced by hook**: ACTIVE + DELIVERED ≤ Max Parallel Sprints (hook blocks dispatch)
+- **Convergence files serialize**: touching same hot file gates dispatch (hook blocks)
+- **File overlap blocks**: shared files between active sprints blocked (hook blocks)
+- **Rolling**: as sprints merge, slots open → next batch dispatches immediately
+- **No fan-out**: dispatch 3, merge 3, dispatch 3 (never dispatch 11, merge 11)
 
-Default: serial evaluation. Switch to parallel when phase has 4+ parallel sprints.
+Evaluation: serial by default. Parallel when 3+ sprints in batch.
 
 ---
 

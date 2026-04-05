@@ -48,8 +48,49 @@ Leader 每 10 sprint 审查 hook-intercepts.log，提取有价值的经验升级
 - **Action**: 从所有 CLI 模板中移除 `yes |`，三层静默执行降为两层 (`CI=true GIT_TERMINAL_PROMPT=0 timeout <N>`)
 - **Result**: 改善 — Gemini CLI 在 POAI 项目 Sprint 57 重试后正常执行
 
+### Sprint 65-76: Merge 冲突与细节丢失（系统性缺陷）
+- **Category**: architecture
+- **Lesson**: 并行 worktree 从同一个 commit fork 后各自独立修改，merge 时必然冲突。用 `--theirs` 解决冲突会丢弃 main 侧变更（即先 merge 的 Sprint 修复）。根因有四层：(1) 无 rebase-before-merge (2) `--theirs` 是破坏性策略 (3) 无文件重叠检测 (4) 无 post-merge 回归验证
+- **Action**: 四项协议修改：
+  - dispatch-rules.md: merge 流程改为 rebase-then-merge，新增冲突解决优先级，串行 merge 规则
+  - orchestration-loop.md: Step 4 增加 file overlap 检测，Step 7 改为串行 rebase+merge，新增 Step 7.5 post-merge smoke test
+  - quality-gates.md: 新增 Post-Merge Regression Gate
+  - CLAUDE.md: Iron Rules 新增 No Blind Merge
+- **Result**: 待验证
+
+### Sprint 65-78 (vibe-sensei): 分支脱离 main 成为事实主线
+- **Category**: architecture
+- **Lesson**: Leader 在某个时刻 checkout 到了 worktree 分支上工作，后续所有 Sprint 都在这个分支上积累。main 被遗忘在 92 commits 之前。worktree 之间直接合并（`Merge worktree-A into worktree-B`），main 作为唯一真相源的约束被打破。最终导致两条平行线、47K 行差异、无法轻松合并。
+- **Action**: 三条新 Iron Rule：
+  - Rule 14 **Main Is Truth**: Leader 必须始终在 main 上，所有 merge 只能 target main
+  - Rule 15 **Short-Lived Branches**: worktree 分支必须在同 session 内 merge 或 discard
+  - Rule 16 **No Orphan Work**: DELIVERED 分支必须先 merge 才能 fork 新的
+  - orchestration-loop.md 新增 Step 0 Pre-Flight Check
+  - Session Start/End Protocol 强化为 mandatory cleanup
+- **Result**: 待验证
+
+### Sprint 65-76: K 线图技术选型走弯路
+- **Category**: dispatch
+- **Lesson**: 从 Lightweight Charts → 各种配置 → TradingView Charting Library，走了多个 Sprint 的弯路。根因：实现前未先派 Researcher 做技术选型
+- **Action**: 强化 dispatch-rules.md 的"研究前置"原则 — 涉及未知领域（库选型、API 选型、架构方案）的实现任务，必须先派 Researcher 再派 Generator
+- **Result**: 待验证
+
 ### Sprint 5: Worktree 路径混淆
 - **Category**: communication
 - **Lesson**: inbox 任务文件给了 main 仓库的绝对路径作为 Context Files，Agent 直接编辑了 main 的文件而非 worktree 副本。Leader cp worktree→main 时覆盖了 Agent 的修改
 - **Action**: 未来 inbox 任务必须强调 "work within your worktree, translate absolute paths to worktree-relative paths"。Leader 合并产出时先 diff 确认内容在 worktree 中
 - **Result**: 改善 — 本次手动恢复，后续可避免
+
+### 11-Sprint Fan-Out Merge Hell（跨项目通用模式）
+- **Category**: architecture
+- **Lesson**: 11 个 Sprint 并行派发，6+ 个同时修改相同"收敛文件"（tools.ts, index.ts, types.ts 等注册表文件），导致串行合并时需要 10 次级联 rebase 冲突解决。六层根因：(1) 文件重叠检测是建议性文本，Leader 可跳过 (2) 无并行调度上限 — "MUST parallelize" 鼓励全量扇出 (3) "收敛文件"概念不存在 — 注册表文件和普通文件同等对待 (4) Rule 16 不够 — DELIVERED Sprint 同时到达时规则失效 (5) Sprint Files 列表是自由文本，重叠检测不可靠 (6) 无滚动批次概念 — 全部派发或逐个派发，没有中间态
+- **Action**: 首次引入代码级强制执行（hook），而非仅文档更新：
+  - 新建 `enforce-dispatch-gate.sh` PreToolUse hook — 三道硬门禁：并行上限（active contracts < max_parallel）、收敛文件门禁（同一热文件不得被多个 active Sprint 修改）、文件重叠检查（active Sprint 间不得有共享文件）。exit 2 拦截，无法绕过
+  - 新建 `.selfmodel/state/dispatch-config.json` — JSON 配置（max_parallel, convergence_files），shell 用 jq 确定性解析
+  - 新建 `scripts/verify-delivery.sh` — 交付后对比合约声明文件 vs 实际修改文件，发现未声明修改
+  - sprint-template.md 新增结构化 `## Files` 段（Creates/Modifies/Out of Scope），hook 自动解析
+  - orchestration-loop.md Step 4 重写为 "Rolling Batch Dispatch"（滚动批次：调度 3 → 合并 3 → 调度 3）
+  - dispatch-rules.md 新增 "收敛文件管理" 段，并行调度加三条硬约束
+  - CLAUDE.md 新增 Iron Rule 17 (Rolling Batch) 和 Rule 18 (Convergence File Gate)
+  - `.claude/settings.json` 注册新 hook 到 Bash matcher 链
+- **Result**: 待验证

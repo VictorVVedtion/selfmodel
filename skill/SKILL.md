@@ -6,7 +6,7 @@ description: |
   Use when: "selfmodel", "multi-agent", "sprint", "dispatch agent", "team orchestration",
   "quality review", "worktree workflow", or when the project has a .selfmodel/ directory.
 allowed-tools: [Read, Write, Edit, Bash, Glob, Grep, Agent]
-version: 2.0.0
+version: 3.0.0
 ---
 
 # selfmodel — Multi-AI Agent Team Orchestration

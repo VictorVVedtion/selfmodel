@@ -19,8 +19,17 @@ DRAFT → ACTIVE → DELIVERED → REVIEWED → MERGED | REJECTED
 
 ## Constraints
 - Timeout: <60 | 120 | 180>s
-- Files in scope: <list specific files or directories>
-- Files out of scope: <do not touch>
+- Files: see ## Files section above (enforced by dispatch-gate hook)
+
+## Files (必填 — 结构化文件列表，用于调度门禁自动重叠检测)
+### Creates
+- <新建文件路径>
+
+### Modifies
+- <修改文件路径>
+
+### Out of Scope
+- .selfmodel/
 
 ## Deliverables
 - [ ] <File or feature 1>

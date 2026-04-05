@@ -186,9 +186,21 @@ Skill tool:
 **调用时机**: orchestration-loop.md Step 6.5（E2E PASS 且 Sprint 有用户交互面时）
 **Verdict 合并**: quality-gates.md Step 4.7
 
-### 并行调度
+### 并行调度（受限滚动批次）
 
-无依赖的任务必须并行调度：
+并行调度受以下硬约束限制（由 `enforce-dispatch-gate.sh` hook 强制执行）：
+
+1. **最大并行上限**: `.selfmodel/state/dispatch-config.json` → `max_parallel`（默认 3）
+   - ACTIVE + DELIVERED 状态的 Sprint 总数不得超过此上限
+   - **Hook 强制**: 超限时 hook 以 exit 2 拦截 agent 调用，无法绕过（除非 BYPASS）
+2. **收敛文件门禁**: `dispatch-config.json` → `convergence_files[]`
+   - 两个 Sprint 触碰同一收敛文件 → 必须串行（先调度编号小的）
+   - **Hook 强制**: 检测到收敛文件冲突时拦截
+3. **结构化文件重叠检测**: Sprint 合约 `## Files` 段（具体路径列表）
+   - 两个 active Sprint 共享任何文件 → hook 拦截
+   - **禁止**: 用模糊描述替代文件路径（如 "src/ 目录" → 不可接受）
+
+调度方式不变：
 - 多个 Agent tool 调用放在同一个 message 中
 - Gemini/Codex 用 `run_in_background: true` 后台执行
 - **Researcher 可与 Generator 并行**（研究和实现无依赖时）
@@ -253,6 +265,38 @@ git merge sprint/<N>-<agent> --no-ff -m "Sprint <N>: <title>"
 ```
 
 **关键**: 每次 merge 后，后续待 merge 的分支必须先 rebase 到新的 main HEAD。
+
+---
+
+## 收敛文件管理（Convergence Files）
+
+### 定义
+
+收敛文件是项目中多个功能都需要修改的"热文件"。典型例子：
+- 工具注册表（`tools.ts`）— 每个新工具都需要在此注册
+- 导出聚合文件（`index.ts`）— 每个新模块都需要在此导出
+- 类型定义（`types.ts`）— 每个新功能都需要在此添加类型
+- 观察者注册（`guardian-observer.ts`）— 每个新 hook 都需要在此注册
+- 路由注册（`routes/index.ts`）— 每个新页面都需要在此注册
+
+### 存储
+
+收敛文件列表存储在 `.selfmodel/state/dispatch-config.json` → `convergence_files[]`。
+由 `enforce-dispatch-gate.sh` hook 在每次 agent 调度时自动读取和检查。
+
+### 识别时机
+
+Leader 在以下时刻识别和更新收敛文件列表：
+1. **创建 plan.md 时**: 扫描所有 Sprint 的 Files 列表，出现在 2+ Sprint 中的文件 → 标记
+2. **Phase 边界**: 审查本 Phase 是否有新的共享文件
+3. **merge 冲突后**: 冲突涉及的文件自动加入候选列表
+4. **`verify-delivery.sh` 报告未声明修改时**: 频繁出现的未声明文件 → 候选
+
+### 运行时规则（由 hook 强制）
+
+- 收敛文件同一时间只允许一个 ACTIVE Sprint 触碰
+- Sprint merge 后，收敛文件"释放"，下一个触碰它的 Sprint 才可调度
+- **Leader 不得绕过此规则**（hook 硬门禁，非建议）
 
 ---
 

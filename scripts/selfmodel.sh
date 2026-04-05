@@ -4,7 +4,7 @@
 # Requires: jq (for JSON processing). macOS + Linux.
 set -eo pipefail
 
-SELFMODEL_VERSION="0.2.0"
+SELFMODEL_VERSION="0.3.0"
 SELFMODEL_REPO="https://raw.githubusercontent.com/VictorVVedtion/selfmodel/main"
 
 # ─── Colors ───────────────────────────────────────────────────────────────────
@@ -676,17 +676,23 @@ remote_update() {
         warn "No scripts/hooks/ found in remote archive."
     fi
 
-    # 5. Sync selfmodel.sh itself (backup → overwrite → chmod)
-    if [[ -f "$extracted/scripts/selfmodel.sh" ]]; then
-        local target="$dir/scripts/selfmodel.sh"
-        if [[ -f "$target" ]]; then
-            cp "$target" "${target}.bak.${ts}"
-            info "Backed up: selfmodel.sh → .bak.${ts}"
-        fi
-        cp "$extracted/scripts/selfmodel.sh" "$target"
-        chmod +x "$target"
-        ok "Updated: selfmodel.sh"
-        sync_count=$((sync_count + 1))
+    # 5. Sync scripts/*.sh (root-level scripts including selfmodel.sh, verify-delivery.sh)
+    if [[ -d "$extracted/scripts" ]]; then
+        mkdir -p "$dir/scripts"
+        for f in "$extracted/scripts/"*.sh; do
+            [[ -f "$f" ]] || continue
+            local name
+            name=$(basename "$f")
+            local target="$dir/scripts/$name"
+            if [[ -f "$target" ]]; then
+                cp "$target" "${target}.bak.${ts}"
+                info "Backed up: scripts/$name → .bak.${ts}"
+            fi
+            cp "$f" "$target"
+            chmod +x "$target"
+            ok "Updated: scripts/$name"
+            sync_count=$((sync_count + 1))
+        done
     fi
 
     # 6. Update VERSION file
@@ -716,7 +722,20 @@ remote_update() {
         fi
     fi
 
-    # 8. NOT synced: state/, contracts/, inbox/ (project-specific data)
+    # 8. Seed dispatch-config.json (only if not present — never overwrite user config)
+    if [[ -f "$extracted/.selfmodel/state/dispatch-config.json" ]]; then
+        local target="$dir/.selfmodel/state/dispatch-config.json"
+        if [[ ! -f "$target" ]]; then
+            mkdir -p "$dir/.selfmodel/state"
+            cp "$extracted/.selfmodel/state/dispatch-config.json" "$target"
+            ok "Created: dispatch-config.json (new — edit convergence_files for your project)"
+            sync_count=$((sync_count + 1))
+        else
+            info "dispatch-config.json already exists. Skipped (user config preserved)."
+        fi
+    fi
+
+    # 9. NOT synced: state/{team.json,plan.md,...}, contracts/, inbox/ (project-specific data)
     #    These directories contain per-project state and must not be overwritten.
 
     # 9. Cleanup

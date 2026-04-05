@@ -22,7 +22,13 @@ selfmodel 框架的核心行为约束。所有 Agent 和 Leader 必须遵守。
 9. **File Buffer Only** — 复杂提示词必须写入 `.selfmodel/inbox/<agent>/` 文件。CLI 只引用文件路径。绝不通过 CLI 参数传递原始提示词。
 10. **No Interactive** — 所有命令: `CI=true GIT_TERMINAL_PROMPT=0 timeout <N> <cmd>`。零交互提示。不用 `yes |`（导致 E2BIG）。
 11. **Small Batch** — 每个 agent 任务在 30-60 秒内完成。超时 → 重试 → 升级。
-12. **Efficiency First** — 无依赖的一切并行化。同时派遣多个 agent。最大化吞吐。
+12. **Efficiency First** — 无依赖的一切并行化，受滚动批次上限约束（Rule 17）。在上限内同时派遣多个 agent。最大化吞吐但不扇出。
+13. **No Blind Merge** — 绝不用 `--theirs`/`--ours` 盲目解决冲突。Always rebase onto latest main before merge。Merge 必须串行。Post-merge smoke test 必须通过。
+14. **Main Is Truth** — Leader 必须始终在 main 上。所有 merge 只能 target main。绝不 branch-to-branch merge。
+15. **Short-Lived Branches** — Worktree 分支必须在同 session 内 merge 或 discard。无分支跨 session 存活。
+16. **No Orphan Work** — 每个 DELIVERED Sprint 必须被 review+merge（或 reject）后才能 fork 新 Sprint。
+17. **Rolling Batch** — 最大并行 Sprint 数默认 3（`dispatch-config.json` 可调）。ACTIVE + DELIVERED 总数不得超过上限。禁止扇出全量派发。由 `enforce-dispatch-gate.sh` hook 强制执行。
+18. **Convergence File Gate** — `dispatch-config.json` → `convergence_files[]` 中的文件强制串行。两个 Sprint 触碰同一收敛文件不得同时 ACTIVE。Hook 硬门禁。
 
 ---
 

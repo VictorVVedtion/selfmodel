@@ -25,6 +25,16 @@
 ## Assigned To
 <gemini | codex | opus>
 
+## Files（必填 — 结构化文件列表，用于调度门禁自动重叠检测）
+### Creates
+- <新建文件的具体路径，如 src/components/NewFeature.tsx>
+
+### Modifies
+- <修改文件的具体路径，如 src/tools.ts>
+
+### Out of Scope
+- .selfmodel/
+
 ## Deliverables
 - [ ] <具体文件路径或产物>
 - [ ] <第二个交付物>
@@ -88,10 +98,11 @@ DRAFT → ACTIVE → DELIVERED → REVIEWED → MERGED | REJECTED
 ## 填写规则
 
 1. **Objective**: 一句话，≤20 字
-2. **Deliverables**: 必须是具体文件路径或可验证产物，禁止模糊描述
-3. **Acceptance Criteria**: 每条必须可通过命令或代码验证，禁止主观描述
-4. **Context Files**: 绝对路径，Agent 需读取的所有相关文件
-5. **Constraints**: 时间约束参照 dispatch-rules.md 超时指南
+2. **Files**: 必须是具体文件路径（精确到文件名）。Creates/Modifies 分开列出。禁止目录级模糊描述（`src/` 不可接受，`src/tools.ts` 可以）。此字段被 `enforce-dispatch-gate.sh` hook 自动解析，用于并行上限、收敛文件门禁、文件重叠检测三道硬门禁。
+3. **Deliverables**: 必须是具体文件路径或可验证产物，禁止模糊描述
+4. **Acceptance Criteria**: 每条必须可通过命令或代码验证，禁止主观描述
+5. **Context Files**: 绝对路径，Agent 需读取的所有相关文件
+6. **Constraints**: 时间约束参照 dispatch-rules.md 超时指南
 
 ## 合约生命周期
 

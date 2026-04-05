@@ -24,11 +24,13 @@ Only code, CLI commands, and file content may be in English.
 9. **File Buffer Only** — Complex prompts MUST be written to `.selfmodel/inbox/<agent>/` files. CLI only references file paths. NEVER pass raw prompts via CLI arguments.
 10. **No Interactive** — All commands: `CI=true GIT_TERMINAL_PROMPT=0 timeout <N> <cmd>`. Zero interactive prompts allowed. Do NOT use `yes |` (causes E2BIG).
 11. **Small Batch** — Each agent task completes in 30-60 seconds. Timeout → retry → escalate.
-12. **Efficiency First** — Parallelize everything with no dependencies. Dispatch multiple agents simultaneously. Maximize throughput.
+12. **Efficiency First** — Parallelize everything with no dependencies, up to the rolling batch cap (Rule 17). Dispatch multiple agents simultaneously within the cap. Maximize throughput without fan-out.
 13. **No Blind Merge** — NEVER use `--theirs` or `--ours` to resolve merge conflicts without understanding both sides. ALWAYS rebase onto latest main before merge. Merge MUST be serial (one at a time). Post-merge smoke test MUST pass. See `dispatch-rules.md` Rebase-Then-Merge.
 14. **Main Is Truth** — Leader MUST stay on main at all times. ALL merges target main. NEVER merge branch-to-branch. If `git branch --show-current` ≠ main, stop and fix before doing anything else.
 15. **Short-Lived Branches** — Worktree branches MUST be merged or discarded within the same session. No branch survives across sessions. Session end checklist: `git worktree list` must show only the main worktree.
 16. **No Orphan Work** — Every Sprint that reaches DELIVERED must be reviewed and merged (or rejected) before starting new Sprints. Never leave DELIVERED branches unmerged while forking new ones.
+17. **Rolling Batch** — Max parallel Sprints defaults to 3 (configurable in `dispatch-config.json`). ACTIVE + DELIVERED count MUST NOT exceed the cap. Never fan-out all pending sprints at once. Rhythm: dispatch 3 → merge 3 → dispatch 3. **Enforced by `enforce-dispatch-gate.sh` hook** — dispatch blocked at tool level if exceeded.
+18. **Convergence File Gate** — Files listed in `dispatch-config.json` → `convergence_files[]` force serialization. Two Sprints touching the same convergence file MUST NOT be ACTIVE simultaneously. This is a hard gate enforced by hook, not advisory.
 
 ### Leader Decision Principles
 
@@ -143,11 +145,14 @@ CI=true timeout 300 gemini \
   2>&1 | tee /Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/research/sprint-<N>-report.md
 ```
 
-### Parallel Dispatch
+### Parallel Dispatch (Rolling Batch — Rule 17, 18)
 
-Independent tasks MUST be dispatched in parallel:
+Independent tasks dispatched in parallel, **within rolling batch cap**:
 - Multiple Agent tool calls in a single message
 - Bash commands with `run_in_background: true`
+- **Hard cap**: ACTIVE + DELIVERED ≤ `dispatch-config.json` → `max_parallel` (default 3)
+- **Convergence gate**: shared hot files force serialization
+- **Hook enforced**: `enforce-dispatch-gate.sh` blocks dispatch if any gate fails
 - Wait for all to complete, then review collectively
 
 ## Worktree Isolation Workflow
@@ -170,9 +175,11 @@ git worktree list  # must show only main worktree
 1. Write contract → .selfmodel/contracts/active/sprint-<N>.md
    Write task    → .selfmodel/inbox/<agent>/sprint-<N>.md
 
-2. File Overlap Check (parallel sprints only)
-   Compare deliverables file lists across parallel sprints
-   Overlap detected → merge into one Sprint OR serialize
+2. Dispatch Gate (enforced by enforce-dispatch-gate.sh hook)
+   a. Verify ACTIVE + DELIVERED count < max_parallel (default 3)
+   b. Compare contract ## Files lists — overlap → merge Sprint or serialize
+   c. Check Files against dispatch-config.json convergence_files — shared → serialize
+   d. Hook blocks dispatch at tool level if any gate fails
 
 3. Create worktree (from latest main HEAD)
    /git-worktree add sprint-<N>-<agent> -b sprint/<N>-<agent>
@@ -203,6 +210,7 @@ git worktree list  # must show only main worktree
 - **NEVER checkout a worktree branch as Leader** — Leader stays on main
 - **NEVER leave branches across sessions** — merge or discard before session end
 - **NEVER start new Sprints with DELIVERED branches pending** — merge first
+- **NEVER dispatch more Sprints than the rolling batch cap** — ACTIVE + DELIVERED ≤ max_parallel (enforced by hook)
 
 **Opus Agent special case**: Uses Agent tool + `isolation: "worktree"`, auto-manages worktree
 
@@ -234,6 +242,8 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 | Scenario | Load File |
 |----------|-----------|
 | Dispatch decisions + CLI templates | `.selfmodel/playbook/dispatch-rules.md` |
+| Dispatch gate config (cap, convergence files) | `.selfmodel/state/dispatch-config.json` |
+| Delivery verification (declared vs actual files) | `scripts/verify-delivery.sh` |
 | Research dispatch + pipeline protocol | `.selfmodel/playbook/research-protocol.md` |
 | Quality review + scoring | `.selfmodel/playbook/quality-gates.md` |
 | Sprint contract creation | `.selfmodel/playbook/sprint-template.md` |
@@ -313,7 +323,7 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 - **No skipping review** — Merging unreviewed code directly
 - **No raw CLI calls** — Complex prompts without file buffer
 - **No main-branch edits** — Agent code changes MUST be in worktrees
-- **No serial execution** — Independent tasks MUST be parallelized
+- **No serial execution** — Independent tasks MUST be parallelized (within rolling batch cap, Rule 17)
 
 ## Directory Structure
 
@@ -334,6 +344,7 @@ selfmodel/
     ├── state/team.json                # Team state
     ├── state/next-session.md          # Session handoff
     ├── state/plan.md                  # Orchestration plan (phases + sprints)
+    ├── state/dispatch-config.json     # Dispatch gate config (cap, convergence files)
     ├── state/quality.jsonl            # Quality score history
     ├── state/evolution.jsonl          # Evolution log
     ├── state/orchestration.log        # Orchestration loop event log
