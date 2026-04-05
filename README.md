@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/VictorVVedtion/selfmodel/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/version-0.2.0-green.svg?style=flat-square" alt="Version 0.2.0">
+  <img src="https://img.shields.io/badge/version-0.3.0-green.svg?style=flat-square" alt="Version 0.3.0">
   <img src="https://img.shields.io/badge/agents-7_roles-8B5CF6.svg?style=flat-square" alt="7-Role Agent Team">
   <img src="https://img.shields.io/badge/isolation-git_worktree-D97706.svg?style=flat-square" alt="Git Worktree Isolation">
   <img src="https://img.shields.io/badge/platform-Claude_Code-000000.svg?style=flat-square&logo=anthropic" alt="Claude Code">
@@ -27,12 +27,16 @@ selfmodel is not a framework. It's a **living system** where AI agents design, i
 
 ## Quick Start
 
-### Option A: Install as Claude Code Skill (recommended)
+### Install
 
 ```bash
 git clone https://github.com/VictorVVedtion/selfmodel.git
 cd selfmodel && bash install.sh
 ```
+
+This installs:
+- **Claude Code skill** → `~/.claude/skills/selfmodel/` (6 slash commands)
+- **CLI tool** → `/usr/local/bin/selfmodel` (may prompt for sudo)
 
 Then in Claude Code:
 
@@ -45,27 +49,37 @@ Then in Claude Code:
 /selfmodel:status        # View team status and quality trends
 ```
 
-### Option B: Use the CLI directly
+Or from any terminal:
 
 ```bash
-# Initialize selfmodel in an existing project (auto-detects tech stack)
-bash scripts/selfmodel.sh adapt
-
-# Initialize a new project from scratch
-bash scripts/selfmodel.sh init
-
-# Update playbook and hooks to latest version
-bash scripts/selfmodel.sh update
-
-# Show team health dashboard
-bash scripts/selfmodel.sh status
-
-# Any subcommand supports --help
-bash scripts/selfmodel.sh init --help
-bash scripts/selfmodel.sh update --help
+selfmodel init           # Initialize in current project
+selfmodel adapt          # Adapt to existing project (non-destructive)
+selfmodel status         # Show team health dashboard
+selfmodel version        # Show version
+selfmodel --help         # Show all subcommands
 ```
 
-Requires: `jq` (`brew install jq` on macOS, `apt install jq` on Linux)
+### Update
+
+```bash
+# Update an existing project to latest version (hot-update, no restart needed)
+selfmodel update --remote
+
+# Update to a specific version
+selfmodel update --remote --version v0.3.0
+
+# If selfmodel CLI is not in PATH, use the script directly:
+bash /path/to/selfmodel/scripts/selfmodel.sh update --remote
+```
+
+Remote update syncs: hooks, playbook, scripts, VERSION, dispatch config. Does NOT overwrite project state (team.json, contracts, plan).
+
+To update the Claude Code skill definitions (slash commands), re-run `bash install.sh` and start a new session.
+
+### Requirements
+
+- `jq` (`brew install jq` on macOS, `apt install jq` on Linux)
+- Claude Code CLI installed (`~/.claude/` exists)
 
 ## Architecture
 
@@ -165,6 +179,7 @@ Evaluator         E2E Agent v2
 - **Small batches** — Each agent task completes in 30–60 seconds. No API timeout risks.
 - **Research before implementation** — Unknown domains must go through Researcher before any Generator is dispatched.
 - **Hooks enforcement** — Claude Code hooks convert CLAUDE.md soft rules into hard constraints (exit 2 = block). Interceptions auto-logged to `state/hook-intercepts.log` for evolution analysis.
+- **Dispatch gate (v0.3.0)** — Hook-enforced triple gate prevents fan-out merge hell: (1) rolling batch cap — max 3 parallel sprints, (2) convergence file gate — shared hot files force serialization, (3) structural file overlap — contracts with shared files cannot be active simultaneously. Configured via `dispatch-config.json`, enforced by `enforce-dispatch-gate.sh`.
 - **Agent safety guardrails** — Agents are forbidden from destructive operations (rm -rf, git push, modifying .selfmodel/), installing global dependencies, or calling production APIs.
 - **Leader decision principles** — 6 principles (Completeness, Blast Radius, Ship > Perfect, DRY, Explicit > Clever, Bias-toward-action) enable Leader to auto-decide intermediate questions without human escalation.
 - **AI Slop detection** — Evaluator penalizes 8 patterns of AI-generated low-quality code (excessive comments, unnecessary abstractions, template error handling, etc.).
@@ -235,13 +250,15 @@ Rampage integrates as an optional chaos gate in the selfmodel pipeline (Step 6.5
 ```
 selfmodel/
 ├── CLAUDE.md                          # Operating manual (English instructions)
-├── VERSION                            # Semantic version (0.2.0)
+├── VERSION                            # Semantic version (0.3.0)
 ├── scripts/
 │   ├── selfmodel.sh                   # CLI: init / adapt / update / status
+│   ├── verify-delivery.sh            # Post-delivery: declared vs actual files audit
 │   └── hooks/                         # Claude Code enforcement hooks
 │       ├── session-start.sh           # Auto-inject team state on session start
 │       ├── enforce-leader-worktree.sh # Block Leader from editing code directly
-│       └── enforce-agent-rules.sh     # Require contract + inbox before agent calls
+│       ├── enforce-agent-rules.sh     # Require contract + inbox before agent calls
+│       └── enforce-dispatch-gate.sh   # Rolling batch cap + convergence files + overlap
 ├── .claude/
 │   └── settings.json                  # Hooks configuration
 ├── install.sh                         # Skill installer (→ ~/.claude/skills/)
@@ -262,6 +279,7 @@ selfmodel/
     │   └── e2e/                       # E2E verification task files
     ├── state/
     │   ├── team.json                  # Team status + metrics + detected stack
+    │   ├── dispatch-config.json       # Dispatch gate: max_parallel + convergence_files
     │   ├── next-session.md            # Cross-session handoff
     │   ├── plan.md                    # Orchestration plan (phases + sprints)
     │   ├── quality.jsonl              # Quality scores (append-only)
@@ -303,24 +321,48 @@ selfmodel/
 For large projects with 10+ Sprints, the automated orchestration loop handles the entire lifecycle:
 
 ```
-plan.md → find executable sprints → dispatch agents (parallel)
+plan.md → rolling batch dispatch (max 3 parallel, overlap-gated)
     → wait → evaluate + E2E (parallel) → rampage (optional)
-    → merge verdicts → act → checkpoint → phase gate → loop
+    → serial merge (rebase-then-merge) → checkpoint → phase gate → loop
 ```
 
 Create a plan with `/selfmodel:plan`, then start the loop with `/selfmodel:loop`. The loop runs until all sprints are MERGED or BLOCKED. Phase boundaries trigger forced context resets.
 
+**Rolling batch** (v0.3.0): dispatch 3 → merge 3 → dispatch 3. Never fan-out all sprints at once. Convergence files (shared hot files like `tools.ts`, `index.ts`) force serialization. All enforced by hook.
+
 ## Hooks Enforcement
 
-Three Claude Code hooks convert CLAUDE.md rules into hard constraints:
+Four Claude Code hooks convert CLAUDE.md rules into hard constraints:
 
 | Hook | Trigger | Enforces |
 |------|---------|----------|
 | `session-start.sh` | SessionStart | Auto-inject team.json + next-session.md context |
 | `enforce-leader-worktree.sh` | PreToolUse(Write\|Edit) | Leader cannot edit code files directly |
 | `enforce-agent-rules.sh` | PreToolUse(Bash) | No gemini/codex calls without contract + inbox |
+| `enforce-dispatch-gate.sh` | PreToolUse(Bash) | Rolling batch cap + convergence files + file overlap |
 
-Bypass for emergencies: `BYPASS_LEADER_RULES=1` or `BYPASS_AGENT_RULES=1`
+Bypass for emergencies: `BYPASS_LEADER_RULES=1`, `BYPASS_AGENT_RULES=1`, or `BYPASS_DISPATCH_GATE=1`
+
+### Dispatch Gate (v0.3.0)
+
+The dispatch gate hook prevents fan-out merge hell — the scenario where 11 parallel sprints all modify the same files, causing cascading rebase conflicts.
+
+**Three hard gates** (exit 2 = block, cannot bypass without env var):
+
+| Gate | Check | Config |
+|------|-------|--------|
+| **Parallel cap** | ACTIVE + DELIVERED contracts ≤ max | `dispatch-config.json` → `max_parallel` (default 3) |
+| **Convergence files** | No two active sprints modify the same hot file | `dispatch-config.json` → `convergence_files[]` |
+| **File overlap** | No shared files between active sprint contracts | Sprint contract `## Files` section |
+
+Configure per-project:
+```bash
+# .selfmodel/state/dispatch-config.json
+{
+  "max_parallel": 3,
+  "convergence_files": ["src/tools.ts", "src/exchange/index.ts"]
+}
+```
 
 ## Adaptive Initialization
 
@@ -353,18 +395,20 @@ Every deliverable scored on 5 dimensions (see `playbook/quality-gates.md`):
 
 ## CLI Reference
 
-### selfmodel.sh
+### selfmodel CLI
 
 ```
-selfmodel init [directory]              Create new selfmodel project
-selfmodel adapt [directory]             Adapt to existing project (non-destructive)
-selfmodel update [--remote] [--version] Update playbook to latest version
-selfmodel status                        Show team health dashboard
-selfmodel version                       Show version
-selfmodel --help                        Show help
+selfmodel init [directory]                        Create new selfmodel project
+selfmodel adapt [directory]                       Adapt to existing project (non-destructive)
+selfmodel update [--remote] [--version v0.3.0]    Update playbook + hooks to latest version
+selfmodel status                                  Show team health dashboard
+selfmodel version                                 Show version
+selfmodel --help                                  Show help
 ```
 
 All subcommands support `--help` for detailed usage.
+
+If `selfmodel` is not in PATH, use `bash /path/to/selfmodel/scripts/selfmodel.sh` instead.
 
 ### Claude Code Slash Commands
 
@@ -381,15 +425,29 @@ All subcommands support `--help` for detailed usage.
 ### Install / Uninstall
 
 ```bash
-# Install as Claude Code skill
+# Install (skill + CLI)
 git clone https://github.com/VictorVVedtion/selfmodel.git
 cd selfmodel && bash install.sh
+
+# Update existing project to latest
+selfmodel update --remote
 
 # Uninstall
 bash uninstall.sh
 ```
 
 Backups stored in `~/.claude/.backups/` (not in skills directory).
+
+**What `selfmodel update --remote` syncs** (hot-update, no restart):
+- `scripts/hooks/*.sh` — enforcement hooks (including dispatch gate)
+- `.selfmodel/playbook/*.md` — all protocol documents
+- `scripts/*.sh` — CLI and utility scripts
+- `VERSION` — version marker
+- `dispatch-config.json` — created if missing (never overwrites existing)
+
+**What requires `bash install.sh` + new session**:
+- `~/.claude/skills/selfmodel/` — skill definition (SKILL.md, references)
+- `~/.claude/commands/selfmodel/` — slash command definitions
 
 ## Iron Rules
 
@@ -399,7 +457,9 @@ Backups stored in `~/.claude/.backups/` (not in skills directory).
 4. **Best Taste** — Naming like prose, architecture worth screenshotting
 5. **Infinite Time** — Never compromise quality for speed
 6. **True Artist** — Every line of code is a signed work of art
-7. **Efficiency First** — Parallelize everything that has no dependency
+7. **Efficiency First** — Parallelize within rolling batch cap (Rule 17)
+8. **Rolling Batch** — Max 3 parallel sprints. Dispatch 3 → merge 3 → dispatch 3. Hook-enforced.
+9. **Convergence File Gate** — Shared hot files force serialization. Hook-enforced.
 
 ## Contributing
 
