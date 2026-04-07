@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # selfmodel — AI Agent Team 工作流初始化与适配工具
-# Usage: selfmodel <init|adapt|update|version> [options]
+# Usage: selfmodel [command] [options]
+# With no args, shows smart dashboard. Run selfmodel --help for full reference.
 # Requires: jq (for JSON processing). macOS + Linux.
 set -eo pipefail
 
@@ -190,9 +191,13 @@ create_structure() {
     mkdir -p "$dir/.selfmodel/reviews"
     mkdir -p "$dir/.selfmodel/state"
     mkdir -p "$dir/.selfmodel/playbook"
+    mkdir -p "$dir/.selfmodel/wiki/modules"
+    mkdir -p "$dir/.selfmodel/wiki/decisions"
+    mkdir -p "$dir/.selfmodel/wiki/patterns"
+    mkdir -p "$dir/.selfmodel/wiki/entities"
 
     # .gitkeep for empty directories
-    for d in contracts/active contracts/archive inbox/gemini inbox/codex inbox/opus inbox/research inbox/evaluator inbox/e2e reviews; do
+    for d in contracts/active contracts/archive inbox/gemini inbox/codex inbox/opus inbox/research inbox/evaluator inbox/e2e reviews wiki/modules wiki/decisions wiki/patterns wiki/entities; do
         touch "$dir/.selfmodel/$d/.gitkeep"
     done
 }
@@ -346,10 +351,11 @@ cmd_init() {
 
     info "Initializing selfmodel in $(bold "$dir")"
 
-    # Check for existing selfmodel
+    # Idempotent: if .selfmodel/ already exists, run non-destructive adapt logic
     if [[ -d "$dir/.selfmodel" ]]; then
-        warn ".selfmodel/ already exists. Use 'selfmodel adapt' instead."
-        exit 1
+        info ".selfmodel/ exists. Running non-destructive update..."
+        _adapt_existing_project "$dir"
+        return 0
     fi
 
     # Detect if there's an existing project
@@ -391,6 +397,9 @@ cmd_init() {
     # Copy playbook from repo (or generate defaults)
     generate_playbook "$dir"
 
+    # Generate project wiki scaffolding
+    generate_wiki "$dir"
+
     # Generate hooks and merge settings.json
     generate_hooks "$dir"
 
@@ -410,30 +419,11 @@ cmd_init() {
     info "Next: review CLAUDE.md, then create your first Sprint contract."
 }
 
-# ─── CMD: adapt ───────────────────────────────────────────────────────────────
-cmd_adapt() {
-    [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]] && {
-        echo "Usage: selfmodel adapt [directory]"
-        echo ""
-        echo "  Adapt selfmodel to an existing project."
-        echo "  Re-detects project stack and updates configuration without overwriting agents or history."
-        echo ""
-        echo "Arguments:"
-        echo "  directory    Target directory (default: current directory)"
-        return 0
-    }
-
+# ─── Adapt Helper: non-destructive update for existing .selfmodel/ ────────────
+# Extracted from old cmd_adapt so both cmd_init (idempotent) and cmd_adapt
+# (deprecated alias) share the same body.  Takes one arg: target directory.
+_adapt_existing_project() {
     local dir="${1:-.}"
-
-    # Validate path
-    if [[ "$dir" != "." && ! -e "$dir" ]]; then
-        err "Directory does not exist: $dir"
-        exit 1
-    fi
-    if [[ "$dir" != "." && -e "$dir" && ! -d "$dir" ]]; then
-        err "Path is not a directory: $dir"
-        exit 1
-    fi
 
     info "Adapting selfmodel to existing project in $(bold "$dir")"
 
@@ -489,6 +479,15 @@ cmd_adapt() {
     # Generate hooks and merge settings.json
     generate_hooks "$dir"
 
+    # Handle wiki — full generate if missing, reconcile if exists
+    if [[ ! -d "$dir/.selfmodel/wiki" ]]; then
+        info "No wiki/ found. Generating full wiki scaffolding..."
+        generate_wiki "$dir"
+    else
+        info "Wiki exists. Reconciling modules..."
+        reconcile_wiki "$dir"
+    fi
+
     # Handle CLAUDE.md — inject rather than overwrite
     if [[ -f "$dir/CLAUDE.md" ]]; then
         if grep -q '<!-- selfmodel:start -->' "$dir/CLAUDE.md" 2>/dev/null; then
@@ -504,6 +503,12 @@ cmd_adapt() {
 
     echo ""
     ok "selfmodel adapted! ($SELFMODEL_VERSION)"
+}
+
+# ─── CMD: adapt (deprecated — delegates to cmd_init) ─────────────────────────
+cmd_adapt() {
+    warn "'selfmodel adapt' is deprecated. Use 'selfmodel init' (now idempotent)."
+    cmd_init "$@"
 }
 
 # ─── CMD: update ──────────────────────────────────────────────────────────────
@@ -831,7 +836,7 @@ cmd_status() {
     echo "────────────────────────────────────────────────────"
     local playbook_files=("dispatch-rules.md" "quality-gates.md" "sprint-template.md" \
         "evaluator-prompt.md" "e2e-protocol.md" "e2e-protocol-v2.md" "orchestration-loop.md" \
-        "research-protocol.md" "context-protocol.md" "lessons-learned.md")
+        "research-protocol.md" "context-protocol.md" "lessons-learned.md" "wiki-protocol.md")
     local missing=0
     for f in "${playbook_files[@]}"; do
         if [[ ! -f "$selfmodel_dir/playbook/$f" ]]; then
@@ -843,7 +848,478 @@ cmd_status() {
         ok "Playbook: all ${#playbook_files[@]} files present"
     fi
 
+    # Wiki health
+    echo "────────────────────────────────────────────────────"
+    local wiki_dir="$selfmodel_dir/wiki"
+    if [[ -d "$wiki_dir" ]]; then
+        local wiki_pages wiki_modules wiki_stale wiki_empty wiki_score
+
+        # Count all .md pages (excluding log.md which is append-only)
+        wiki_pages=$(find "$wiki_dir" -name "*.md" ! -name "log.md" 2>/dev/null | wc -l | tr -d ' ')
+
+        # Count module pages
+        wiki_modules=0
+        if [[ -d "$wiki_dir/modules" ]]; then
+            wiki_modules=$(find "$wiki_dir/modules" -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
+        fi
+
+        # Stale detection: pages without "## Last Updated" line
+        wiki_stale=0
+        while IFS= read -r page; do
+            [[ -z "$page" ]] && continue
+            if ! grep -q "^## Last Updated" "$page" 2>/dev/null; then
+                wiki_stale=$((wiki_stale + 1))
+            fi
+        done < <(find "$wiki_dir" -name "*.md" ! -name "log.md" 2>/dev/null)
+
+        # Empty detection: pages with <= 3 lines (excluding schema.md and log.md)
+        wiki_empty=0
+        while IFS= read -r page; do
+            [[ -z "$page" ]] && continue
+            local basename_page
+            basename_page=$(basename "$page")
+            if [[ "$basename_page" == "schema.md" || "$basename_page" == "log.md" ]]; then
+                continue
+            fi
+            local line_count
+            line_count=$(wc -l < "$page" | tr -d ' ')
+            if [[ "$line_count" -le 3 ]]; then
+                wiki_empty=$((wiki_empty + 1))
+            fi
+        done < <(find "$wiki_dir" -name "*.md" 2>/dev/null)
+
+        # Health score: 10 - empty_count - (stale > 2 ? 2 : 0), minimum 0
+        wiki_score=10
+        wiki_score=$((wiki_score - wiki_empty))
+        if [[ "$wiki_stale" -gt 2 ]]; then
+            wiki_score=$((wiki_score - 2))
+        fi
+        if [[ "$wiki_score" -lt 0 ]]; then
+            wiki_score=0
+        fi
+
+        echo "Wiki: $wiki_pages pages ($wiki_modules modules) | $wiki_stale stale | $wiki_empty empty | health: $wiki_score/10"
+    else
+        warn "Wiki: not initialized (run 'selfmodel init' or 'selfmodel adapt')"
+    fi
+
     echo "═══════════════════════════════════════════════════"
+}
+
+# ─── Generate Wiki ───────────────────────────────────────────────────────────
+
+# Code file extensions used to detect whether a directory contains code
+WIKI_CODE_EXTENSIONS='*.py *.js *.ts *.tsx *.jsx *.go *.rs *.rb *.java *.kt *.swift *.c *.cpp *.h *.cs *.php *.sh *.lua *.ex *.exs *.zig *.nim *.ml *.hs *.scala *.clj'
+
+# Find code files in a directory (bash 3.2 compatible — no negative array indices)
+_wiki_find_code() {
+    local search_dir="$1"
+    local depth="${2:-2}"
+    local first_only="${3:-}"
+    local args=""
+    local first=true
+    for ext in $WIKI_CODE_EXTENSIONS; do
+        if $first; then
+            args="-name $ext"
+            first=false
+        else
+            args="$args -o -name $ext"
+        fi
+    done
+    if [[ -n "$first_only" ]]; then
+        eval "find \"$search_dir\" -maxdepth $depth -type f \\( $args \\) 2>/dev/null | head -1"
+    else
+        eval "find \"$search_dir\" -maxdepth $depth -type f \\( $args \\) 2>/dev/null | head -10"
+    fi
+}
+
+# Directories excluded from module scanning
+WIKI_EXCLUDE_PATTERN='^(\.|node_modules|__pycache__|\.venv|venv|vendor|dist|build|\.selfmodel|\.claude|\.github|\.vscode|\.idea|\.next|\.nuxt|coverage|tmp|temp|\.cache|\.turbo|target|out|bin|obj)$'
+
+# Generate a skeleton module page for a detected code directory
+generate_module_page() {
+    local wiki_dir="$1"
+    local project_dir="$2"
+    local module_name="$3"
+
+    local module_file="$wiki_dir/modules/${module_name}.md"
+
+    # Collect up to 10 key files in this module (by extension)
+    local key_files=()
+    while IFS= read -r f; do
+        [[ -z "$f" ]] && continue
+        local rel="${f#"$project_dir"/}"
+        key_files+=("$rel")
+    done < <(_wiki_find_code "$project_dir/$module_name" 3)
+
+    cat > "$module_file" << MODEOF
+# ${module_name}
+
+## Overview
+Module detected during project scaffolding. Update this section with a description of what \`${module_name}/\` contains and its role in the architecture.
+
+## Key Files
+MODEOF
+
+    if [[ ${#key_files[@]} -gt 0 ]]; then
+        for kf in "${key_files[@]}"; do
+            echo "- \`${kf}\`" >> "$module_file"
+        done
+    else
+        echo "_No code files detected at scan depth._" >> "$module_file"
+    fi
+
+    cat >> "$module_file" << 'MODEOF2'
+
+## See Also
+_Link related wiki pages here._
+
+## Last Updated
+Sprint 0 (init)
+MODEOF2
+}
+
+# Main wiki generation function — called during init
+generate_wiki() {
+    local dir="$1"
+    local wiki_dir="$dir/.selfmodel/wiki"
+
+    # Ensure wiki subdirectories exist
+    mkdir -p "$wiki_dir"/{modules,decisions,patterns,entities}
+
+    # ── 1. schema.md — page format conventions ──────────────────────────────
+    cat > "$wiki_dir/schema.md" << 'SCHEMAEOF'
+# Wiki Schema
+
+Page format conventions for the project wiki.
+
+---
+
+## Page Structure
+
+Every wiki page follows this skeleton:
+
+```markdown
+# Title
+
+## Overview
+Brief description: what this is, why it exists.
+
+## Details
+In-depth content, code references, diagrams.
+
+## See Also
+- [[related-page]]
+- [[another-page]]
+
+## Last Updated
+Sprint <N> (<date or "init">)
+```
+
+## Cross-Link Syntax
+
+Use double-bracket wiki links to reference other pages:
+- `[[modules/auth]]` — link to a module page
+- `[[decisions/001-database-choice]]` — link to a decision record
+- `[[patterns/repository-pattern]]` — link to a pattern page
+- `[[entities/user]]` — link to an entity page
+
+## Naming Conventions
+
+- **Module pages**: `modules/<directory-name>.md` — one page per code-bearing top-level directory
+- **Decision records**: `decisions/<NNN>-<slug>.md` — numbered, append-only
+- **Pattern pages**: `patterns/<pattern-name>.md` — reusable design patterns
+- **Entity pages**: `entities/<entity-name>.md` — domain model entities
+
+## Update Rules
+
+1. When a Sprint modifies files in a module, the corresponding `modules/<name>.md` page should be updated.
+2. Architectural decisions should be recorded in `decisions/` with rationale and alternatives considered.
+3. Updates are logged in `log.md` with timestamp, Sprint reference, and summary.
+4. The `index.md` must stay in sync with actual pages — run `selfmodel adapt` to reconcile.
+
+## Lint Rules
+
+1. **Page count vs module count**: every code-bearing directory should have a wiki page.
+2. **Stale pages**: pages not updated in the last 10 Sprints are flagged.
+3. **Broken internal links**: `[[target]]` must resolve to an existing `.md` file.
+4. **Empty pages**: pages with 3 or fewer non-blank lines are flagged as stubs.
+
+## Auto-Sync Spec
+
+Post-merge, compare `git diff --name-only` against `wiki/modules/`. If code in a module directory changed but its wiki page was not updated, append a warning entry to `log.md`:
+```
+[<timestamp>] WARN: <module> code changed in Sprint <N> but wiki page not updated
+```
+SCHEMAEOF
+
+    # ── 2. Scan for code-bearing directories ────────────────────────────────
+    local module_count=0
+    local module_names=()
+
+    for entry in "$dir"/*/; do
+        [[ ! -d "$entry" ]] && continue
+        local dirname
+        dirname=$(basename "$entry")
+
+        # Skip excluded directories
+        if [[ "$dirname" =~ $WIKI_EXCLUDE_PATTERN ]]; then
+            continue
+        fi
+
+        # Check if directory contains code files (up to depth 2)
+        local has_code
+        has_code=$(_wiki_find_code "$entry" 2 first)
+        [[ -z "$has_code" ]] && continue
+
+        # Enforce max 20 modules
+        if [[ $module_count -ge 20 ]]; then
+            break
+        fi
+
+        generate_module_page "$wiki_dir" "$dir" "$dirname"
+        module_names+=("$dirname")
+        module_count=$((module_count + 1))
+    done
+
+    # ── 3. architecture.md from detect_stack results ─────────────────────────
+    local stacks_str="${DETECTED_STACKS[*]:-none}"
+    local frameworks_str="${DETECTED_FRAMEWORKS[*]:-none}"
+    local test_tools_str="${DETECTED_TEST_TOOLS[*]:-none}"
+
+    cat > "$wiki_dir/architecture.md" << ARCHEOF
+# Architecture
+
+## Overview
+Project architecture seeded from auto-detection. Update this page as the system evolves.
+
+## Project Type
+${DETECTED_TYPE:-unknown}
+
+## Tech Stack
+- **Languages/Runtimes**: ${stacks_str}
+- **Frameworks**: ${frameworks_str}
+- **Test Tools**: ${test_tools_str}
+
+## Directory Tree
+ARCHEOF
+
+    # Add top-level directory listing (non-hidden, non-excluded)
+    for entry in "$dir"/*/; do
+        [[ ! -d "$entry" ]] && continue
+        local dirname
+        dirname=$(basename "$entry")
+        if [[ "$dirname" =~ $WIKI_EXCLUDE_PATTERN ]]; then
+            continue
+        fi
+        echo "- \`${dirname}/\`" >> "$wiki_dir/architecture.md"
+    done
+
+    cat >> "$wiki_dir/architecture.md" << 'ARCHEOF2'
+
+## Key Architectural Decisions
+_Record decisions in `decisions/` and link them here._
+
+## See Also
+- [[modules/]] — per-module documentation
+- [[decisions/]] — architectural decision records
+
+## Last Updated
+Sprint 0 (init)
+ARCHEOF2
+
+    # ── 4. index.md listing all generated pages ─────────────────────────────
+    cat > "$wiki_dir/index.md" << 'INDEXHDR'
+# Wiki Index
+
+Auto-generated page index. Run `selfmodel adapt` to reconcile with actual pages.
+
+---
+
+## Core Pages
+- [[schema]] — page format conventions
+- [[architecture]] — project architecture overview
+- [[log]] — wiki change log
+
+## Module Pages
+INDEXHDR
+
+    for mod in "${module_names[@]}"; do
+        echo "- [[modules/${mod}]]" >> "$wiki_dir/index.md"
+    done
+
+    cat >> "$wiki_dir/index.md" << 'INDEXFTR'
+
+## Decision Records
+_None yet. Create `decisions/<NNN>-<slug>.md` to add._
+
+## Patterns
+_None yet. Create `patterns/<name>.md` to add._
+
+## Entities
+_None yet. Create `entities/<name>.md` to add._
+INDEXFTR
+
+    # ── 5. log.md with initial entry ─────────────────────────────────────────
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    cat > "$wiki_dir/log.md" << LOGEOF
+# Wiki Log
+
+Chronological record of wiki changes.
+
+---
+
+[${ts}] INIT: wiki created, ${module_count} module page(s) generated
+LOGEOF
+
+    ok "Wiki generated: ${module_count} module page(s), schema, architecture, index, log."
+}
+
+# Reconcile wiki during adapt — scan for new modules, update index and log
+reconcile_wiki() {
+    local dir="$1"
+    local wiki_dir="$dir/.selfmodel/wiki"
+
+    # Ensure wiki subdirectories exist
+    mkdir -p "$wiki_dir"/{modules,decisions,patterns,entities}
+
+    local new_count=0
+    local existing_modules=()
+    local all_modules=()
+
+    # Collect existing module pages (strip .md extension)
+    for f in "$wiki_dir"/modules/*.md; do
+        [[ -f "$f" ]] || continue
+        local name
+        name=$(basename "$f" .md)
+        existing_modules+=("$name")
+    done
+
+    # Scan for code-bearing directories
+    local total_scanned=0
+    for entry in "$dir"/*/; do
+        [[ ! -d "$entry" ]] && continue
+        local dirname
+        dirname=$(basename "$entry")
+
+        if [[ "$dirname" =~ $WIKI_EXCLUDE_PATTERN ]]; then
+            continue
+        fi
+
+        local has_code
+        has_code=$(_wiki_find_code "$entry" 2 first)
+        [[ -z "$has_code" ]] && continue
+
+        if [[ $total_scanned -ge 20 ]]; then
+            break
+        fi
+
+        all_modules+=("$dirname")
+        total_scanned=$((total_scanned + 1))
+
+        # Check if module page already exists
+        local found=false
+        for existing in "${existing_modules[@]}"; do
+            if [[ "$existing" == "$dirname" ]]; then
+                found=true
+                break
+            fi
+        done
+
+        if ! $found; then
+            generate_module_page "$wiki_dir" "$dir" "$dirname"
+            new_count=$((new_count + 1))
+        fi
+    done
+
+    # Rebuild index.md with current state
+    cat > "$wiki_dir/index.md" << 'INDEXHDR'
+# Wiki Index
+
+Auto-generated page index. Run `selfmodel adapt` to reconcile with actual pages.
+
+---
+
+## Core Pages
+- [[schema]] — page format conventions
+- [[architecture]] — project architecture overview
+- [[log]] — wiki change log
+
+## Module Pages
+INDEXHDR
+
+    for mod in "${all_modules[@]}"; do
+        echo "- [[modules/${mod}]]" >> "$wiki_dir/index.md"
+    done
+
+    # Include any manually-created module pages not in the scan
+    for existing in "${existing_modules[@]}"; do
+        local in_all=false
+        for mod in "${all_modules[@]}"; do
+            if [[ "$mod" == "$existing" ]]; then
+                in_all=true
+                break
+            fi
+        done
+        if ! $in_all; then
+            echo "- [[modules/${existing}]]" >> "$wiki_dir/index.md"
+        fi
+    done
+
+    # Add decision, pattern, entity sections by scanning actual files
+    echo "" >> "$wiki_dir/index.md"
+    echo "## Decision Records" >> "$wiki_dir/index.md"
+    local has_decisions=false
+    for f in "$wiki_dir"/decisions/*.md; do
+        [[ -f "$f" ]] || continue
+        local name
+        name=$(basename "$f" .md)
+        echo "- [[decisions/${name}]]" >> "$wiki_dir/index.md"
+        has_decisions=true
+    done
+    if ! $has_decisions; then
+        echo "_None yet. Create \`decisions/<NNN>-<slug>.md\` to add._" >> "$wiki_dir/index.md"
+    fi
+
+    echo "" >> "$wiki_dir/index.md"
+    echo "## Patterns" >> "$wiki_dir/index.md"
+    local has_patterns=false
+    for f in "$wiki_dir"/patterns/*.md; do
+        [[ -f "$f" ]] || continue
+        local name
+        name=$(basename "$f" .md)
+        echo "- [[patterns/${name}]]" >> "$wiki_dir/index.md"
+        has_patterns=true
+    done
+    if ! $has_patterns; then
+        echo "_None yet. Create \`patterns/<name>.md\` to add._" >> "$wiki_dir/index.md"
+    fi
+
+    echo "" >> "$wiki_dir/index.md"
+    echo "## Entities" >> "$wiki_dir/index.md"
+    local has_entities=false
+    for f in "$wiki_dir"/entities/*.md; do
+        [[ -f "$f" ]] || continue
+        local name
+        name=$(basename "$f" .md)
+        echo "- [[entities/${name}]]" >> "$wiki_dir/index.md"
+        has_entities=true
+    done
+    if ! $has_entities; then
+        echo "_None yet. Create \`entities/<name>.md\` to add._" >> "$wiki_dir/index.md"
+    fi
+
+    # Append to log.md
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    echo "[${ts}] ADAPT: wiki reconciled, ${new_count} new module page(s) added, ${total_scanned} total modules" >> "$wiki_dir/log.md"
+
+    if [[ $new_count -gt 0 ]]; then
+        ok "Wiki reconciled: ${new_count} new module page(s) added."
+    else
+        ok "Wiki reconciled: no new modules detected."
+    fi
 }
 
 # ─── Generate Playbook ────────────────────────────────────────────────────────
@@ -918,7 +1394,164 @@ LESSONSEOF
         generate_research_protocol "$dir"
     fi
 
+    if [[ ! -f "$dir/.selfmodel/playbook/wiki-protocol.md" ]]; then
+        info "Generating wiki-protocol.md..."
+        generate_wiki_protocol "$dir"
+    fi
+
     ok "Playbook generated."
+}
+
+# ─── Generate wiki-protocol.md ──────────────────────────────────────────────
+generate_wiki_protocol() {
+    local dir="${1:-.}"
+    cat > "$dir/.selfmodel/playbook/wiki-protocol.md" << 'WIKIEOF'
+# Wiki Protocol
+
+Project knowledge wiki maintenance protocol. Agents and Leader follow these rules to keep the wiki accurate and useful.
+
+---
+
+## Page Format
+
+Every wiki page uses this structure:
+
+```markdown
+# Title
+
+## Overview
+Brief description: what this is, why it exists.
+
+## Details
+In-depth content, code references, architecture notes, diagrams.
+
+## See Also
+- [[related-page]]
+
+## Last Updated
+Sprint <N> (<date or "init">)
+```
+
+### Page Types
+
+| Type | Location | Naming | Purpose |
+|------|----------|--------|---------|
+| Module | `wiki/modules/<dir-name>.md` | matches top-level directory name | per-module documentation |
+| Decision | `wiki/decisions/<NNN>-<slug>.md` | numbered, append-only | architectural decision records |
+| Pattern | `wiki/patterns/<pattern-name>.md` | descriptive slug | reusable design patterns |
+| Entity | `wiki/entities/<entity-name>.md` | domain noun | domain model entities |
+
+---
+
+## Update Rules
+
+### Sprint-Level Updates
+
+1. **Contract declaration**: Sprint contracts SHOULD include a `## Wiki Impact` section listing wiki pages that need updating.
+2. **Agent responsibility**: When a Sprint modifies code in a module, the agent SHOULD update the corresponding `wiki/modules/<name>.md` page with relevant changes.
+3. **Leader validation**: During post-merge review (Step 7), Leader checks if code-changed modules have corresponding wiki page updates. Missing updates are logged to `wiki/log.md` as warnings, not treated as blockers.
+
+### Update Workflow
+
+```
+1. Agent modifies code in src/auth/
+2. Agent updates wiki/modules/src.md (or wiki/modules/auth.md if nested)
+3. Agent updates "## Last Updated" to current Sprint number
+4. Leader verifies wiki update in post-merge diff review
+5. If missed: Leader appends warning to wiki/log.md
+```
+
+### Decision Records
+
+- Create a new decision record when making significant architectural choices.
+- Decision records are append-only — never modify past decisions.
+- Format: `decisions/<NNN>-<descriptive-slug>.md` where NNN is zero-padded sequential.
+- Include: context, options considered, chosen option, rationale, consequences.
+
+---
+
+## Lint Rules
+
+These rules detect wiki staleness and inconsistency:
+
+### 1. Page Count vs Module Count
+Every code-bearing top-level directory should have a corresponding `wiki/modules/<name>.md` page. Run `selfmodel adapt` to auto-generate missing pages.
+
+**Detection**: Compare `ls -d */` (excluding ignored dirs) against `ls wiki/modules/*.md`.
+
+### 2. Stale Pages
+Pages not updated in the last 10 Sprints are flagged as potentially stale.
+
+**Detection**: Parse `## Last Updated` line, extract Sprint number, compare against current Sprint from `team.json`.
+
+### 3. Broken Internal Links
+Wiki links (`[[target]]`) must resolve to an existing `.md` file under `wiki/`.
+
+**Detection**: Extract all `[[...]]` references, verify each resolves to a file at `wiki/<reference>.md`.
+
+### 4. Empty Pages
+Pages with 3 or fewer non-blank lines are flagged as stubs needing content.
+
+**Detection**: `awk 'NF' <file> | wc -l` for each wiki page.
+
+---
+
+## Auto-Sync Spec
+
+Post-merge automation to detect wiki-code drift:
+
+### Trigger
+After each Sprint merge to main.
+
+### Detection Logic
+```bash
+# 1. Get changed code files from Sprint
+changed_dirs=$(git diff --name-only HEAD~1..HEAD | \
+  grep -v '^\.' | \
+  cut -d/ -f1 | \
+  sort -u)
+
+# 2. For each changed dir, check if wiki page was also updated
+for dir_name in $changed_dirs; do
+    wiki_page="wiki/modules/${dir_name}.md"
+    if [ -f ".selfmodel/$wiki_page" ]; then
+        # Check if wiki page was in the diff
+        if ! git diff --name-only HEAD~1..HEAD | grep -q ".selfmodel/$wiki_page"; then
+            # Wiki page exists but was not updated
+            echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] WARN: ${dir_name} code changed but wiki page not updated" >> .selfmodel/wiki/log.md
+        fi
+    fi
+done
+```
+
+### Output
+Warnings are appended to `wiki/log.md`. They are informational — they do not block merges or fail CI.
+
+---
+
+## Wiki Scaffolding
+
+### During `selfmodel init`
+1. `create_structure()` creates `wiki/{modules,decisions,patterns,entities}` with `.gitkeep` files.
+2. `generate_wiki()` creates:
+   - `schema.md` — page format conventions
+   - `modules/<name>.md` — skeleton page for each detected code-bearing directory (max 20)
+   - `architecture.md` — seeded from `detect_stack` results
+   - `index.md` — listing all generated pages
+   - `log.md` — with initial INIT entry
+
+### During `selfmodel adapt`
+1. If `wiki/` missing → full `generate_wiki()` run.
+2. If `wiki/` exists → `reconcile_wiki()`:
+   - Scan for new code-bearing directories not yet in `wiki/modules/`.
+   - Generate skeleton pages for new modules.
+   - Rebuild `index.md` from current state.
+   - Append ADAPT entry to `log.md`.
+
+### Excluded Directories
+The following directories are never treated as modules:
+`.git`, `node_modules`, `__pycache__`, `.venv`, `venv`, `vendor`, `dist`, `build`, `.selfmodel`, `.claude`, `.github`, `.vscode`, `.idea`, `.next`, `.nuxt`, `coverage`, `tmp`, `temp`, `.cache`, `.turbo`, `target`, `out`, `bin`, `obj`
+WIKIEOF
 }
 
 # ─── Generate Hooks ──────────────────────────────────────────────────────────
@@ -984,6 +1617,22 @@ if [[ -f "${NEXT_SESSION}" ]]; then
     cat "${NEXT_SESSION}"
 else
     echo "（next-session.md 不存在，跳过）"
+fi
+
+echo ""
+echo "── Wiki Index ──"
+WIKI_INDEX="${PROJECT_ROOT}/.selfmodel/wiki/index.md"
+if [[ -f "${WIKI_INDEX}" ]]; then
+    cat "${WIKI_INDEX}"
+else
+    echo "(wiki not initialized)"
+fi
+
+echo ""
+echo "── Wiki Recent ──"
+WIKI_LOG="${PROJECT_ROOT}/.selfmodel/wiki/log.md"
+if [[ -f "${WIKI_LOG}" ]]; then
+    tail -10 "${WIKI_LOG}"
 fi
 
 echo ""
@@ -3094,6 +3743,62 @@ evolve_status() {
     echo "═════════════════════════════════════════"
 }
 
+# ─── evolve_interactive: guided pipeline detect → stage → offer submit ────────
+evolve_interactive() {
+    local dir="$1"
+
+    info "Running interactive evolution pipeline..."
+    echo ""
+
+    # Phase 1: detect
+    info "Phase 1/3: Detecting evolution candidates..."
+    if ! evolve_detect "$dir"; then
+        warn "Detection encountered issues. Stopping interactive pipeline."
+        return 1
+    fi
+    echo ""
+
+    # Check if there are any CANDIDATE entries to stage
+    local evo_file="$dir/.selfmodel/state/evolution.jsonl"
+    local candidate_count=0
+    if [[ -f "$evo_file" ]] && [[ -s "$evo_file" ]]; then
+        candidate_count=$(jq -c 'select(.status == "CANDIDATE")' "$evo_file" 2>/dev/null | wc -l | tr -d ' ')
+    fi
+
+    if [[ "$candidate_count" -eq 0 ]]; then
+        info "No candidates to stage. Pipeline complete."
+        return 0
+    fi
+
+    # Phase 2: stage
+    info "Phase 2/3: Staging candidates ($candidate_count found)..."
+    confirm "Proceed to interactive staging?" || {
+        info "Skipped staging. Run 'selfmodel evolve --stage' later."
+        return 0
+    }
+    evolve_stage "$dir"
+    echo ""
+
+    # Check if there are any STAGED entries to submit
+    local staged_count=0
+    if [[ -f "$evo_file" ]] && [[ -s "$evo_file" ]]; then
+        staged_count=$(jq -c 'select(.status == "STAGED")' "$evo_file" 2>/dev/null | wc -l | tr -d ' ')
+    fi
+
+    if [[ "$staged_count" -eq 0 ]]; then
+        info "No staged entries to submit. Pipeline complete."
+        return 0
+    fi
+
+    # Phase 3: offer submit
+    info "Phase 3/3: $staged_count staged entries ready for upstream submission."
+    confirm "Submit staged patches as upstream PR?" || {
+        info "Skipped submission. Run 'selfmodel evolve --submit' later."
+        return 0
+    }
+    evolve_submit "$dir"
+}
+
 # Main evolve command: parse flags and route.
 cmd_evolve() {
     [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]] && {
@@ -3102,10 +3807,10 @@ cmd_evolve() {
         echo "  Evolution pipeline: detect local improvements, classify generalizability,"
         echo "  package patches, and submit PRs to upstream selfmodel."
         echo ""
+        echo "  With no flags, runs the interactive pipeline: detect → stage → submit."
+        echo ""
         echo "Flags:"
         echo "  --detect     Scan playbook/hooks/scripts diffs against upstream baseline"
-        echo "               Writes CANDIDATE entries to .selfmodel/state/evolution.jsonl"
-        echo "               This is the default action when no flag is specified."
         echo "  --status     Show evolution pipeline status (counts, timestamps, PR URLs)"
         echo "  --stage      Interactively classify CANDIDATE entries (Stage/Reject/Keep)"
         echo "  --submit     Create upstream PR from STAGED patches (requires gh CLI)"
@@ -3113,8 +3818,8 @@ cmd_evolve() {
         echo "  --help       Show this help message"
         echo ""
         echo "Examples:"
-        echo "  selfmodel evolve                 # Run detection (default)"
-        echo "  selfmodel evolve --detect        # Explicit detection scan"
+        echo "  selfmodel evolve                 # Interactive pipeline (default)"
+        echo "  selfmodel evolve --detect        # Detection scan only"
         echo "  selfmodel evolve --status        # View pipeline status"
         echo "  selfmodel evolve --stage         # Classify candidates interactively"
         echo "  selfmodel evolve --submit        # Submit staged patches as PR"
@@ -3123,7 +3828,7 @@ cmd_evolve() {
     }
 
     local dir="."
-    local action="detect"
+    local action="interactive"
 
     # Parse flags
     while [[ $# -gt 0 ]]; do
@@ -3144,11 +3849,12 @@ cmd_evolve() {
     fi
 
     case "$action" in
-        detect)  evolve_detect "$dir" ;;
-        status)  evolve_status "$dir" ;;
-        stage)   evolve_stage "$dir" ;;
-        submit)  evolve_submit "$dir" ;;
-        track)   evolve_track "$dir" ;;
+        interactive) evolve_interactive "$dir" ;;
+        detect)      evolve_detect "$dir" ;;
+        status)      evolve_status "$dir" ;;
+        stage)       evolve_stage "$dir" ;;
+        submit)      evolve_submit "$dir" ;;
+        track)       evolve_track "$dir" ;;
         *)
             err "Unknown evolve action: $action"
             return 1
@@ -3156,50 +3862,141 @@ cmd_evolve() {
     esac
 }
 
+# ─── CMD: dashboard (smart default) ──────────────────────────────────────────
+cmd_dashboard() {
+    local dir="${1:-.}"
+    local selfmodel_dir="$dir/.selfmodel"
+
+    # If no .selfmodel/ exists, suggest init and show short help
+    if [[ ! -d "$selfmodel_dir" ]]; then
+        echo "selfmodel $SELFMODEL_VERSION"
+        echo ""
+        printf '  %bNo .selfmodel/ found in this project.%b\n' "$YELLOW" "$NC"
+        printf '  %b-> Next: selfmodel init%b\n' "$CYAN" "$NC"
+        echo ""
+        cmd_help_short
+        return 0
+    fi
+
+    # Run existing status display
+    cmd_status "$dir"
+    echo ""
+
+    # Suggest next action based on project state
+    local suggestion=""
+
+    # Check for DELIVERED contracts awaiting review
+    # Contract format: "## Status\nDELIVERED" — match standalone DELIVERED line
+    local delivered_count=0
+    if [[ -d "$selfmodel_dir/contracts/active" ]]; then
+        delivered_count=$(grep -rl '^DELIVERED$' "$selfmodel_dir/contracts/active/"*.md 2>/dev/null \
+            | wc -l | tr -d ' ') || delivered_count=0
+    fi
+    if [[ "$delivered_count" -gt 0 ]]; then
+        suggestion="$delivered_count delivered Sprint(s) awaiting review. Run: /selfmodel:review"
+    fi
+
+    # Check if plan.md exists
+    if [[ -z "$suggestion" && ! -f "$selfmodel_dir/state/plan.md" ]]; then
+        suggestion="No orchestration plan found. Run: /selfmodel:plan"
+    fi
+
+    # Check evolution overdue
+    if [[ -z "$suggestion" && -f "$selfmodel_dir/state/team.json" ]]; then
+        local current_sprint last_review
+        current_sprint=$(jq -r '.current_sprint // 0' "$selfmodel_dir/state/team.json" 2>/dev/null)
+        last_review=$(jq -r '.evolution.last_review_sprint // 0' "$selfmodel_dir/state/team.json" 2>/dev/null)
+        local next_detect=$((last_review + 10))
+        if [[ "$next_detect" -le "$current_sprint" ]]; then
+            suggestion="Evolution review overdue. Run: selfmodel evolve"
+        fi
+    fi
+
+    # Default: all clear
+    if [[ -z "$suggestion" ]]; then
+        suggestion="All clear. Run /selfmodel:sprint for next task"
+    fi
+
+    printf '  %b-> Next:%b %s\n' "$CYAN" "$NC" "$suggestion"
+    echo ""
+    cmd_help_short
+}
+
+# ─── Help: short reference (8 lines, used by dashboard) ──────────────────────
+cmd_help_short() {
+    printf '%b%-24s  %-30s%b\n' "$BOLD" "Terminal" "Claude Code" "$NC"
+    echo "────────────────────────  ──────────────────────────────"
+    printf "%-24s  %-30s\n" "selfmodel init"           "/selfmodel:init"
+    printf "%-24s  %-30s\n" "selfmodel status"         "/selfmodel:status"
+    printf "%-24s  %-30s\n" "selfmodel update"         "/selfmodel:loop"
+    printf "%-24s  %-30s\n" "selfmodel evolve"         "/selfmodel:evolve"
+    printf "%-24s  %-30s\n" ""                         "/selfmodel:plan"
+    printf "%-24s  %-30s\n" ""                         "/selfmodel:sprint"
+    printf "%-24s  %-30s\n" ""                         "/selfmodel:review"
+    printf "%-24s  %-30s\n" "selfmodel --help"         "Full reference"
+}
+
+# ─── Help: full detailed reference (used by --help) ─────────────────────────
+cmd_help_full() {
+    echo "selfmodel $SELFMODEL_VERSION — AI Agent Team Workflow"
+    echo ""
+    echo "Usage: selfmodel [command] [directory]"
+    echo ""
+    echo "Commands:"
+    echo "  init       Initialize selfmodel (idempotent — safe to re-run on existing projects)"
+    echo "  update     Update playbook files to latest version"
+    echo "               --remote    Fetch latest from GitHub (instead of local templates)"
+    echo "               --version   Specify version/tag (default: main)"
+    echo "  status     Show team health dashboard"
+    echo "  evolve     Evolution pipeline (interactive by default)"
+    echo "               --detect    Scan diffs against upstream baseline"
+    echo "               --status    Show pipeline status, timestamps, PR URLs"
+    echo "               --stage     Classify CANDIDATE entries (Stage/Reject/Keep)"
+    echo "               --submit    Submit staged patches as upstream PR"
+    echo "               --track     Monitor submitted PR statuses"
+    echo ""
+    echo "Flags:"
+    echo "  -v, --version   Show version"
+    echo "  -h, --help      Show this help message"
+    echo ""
+    echo "Aliases (backward compat):"
+    echo "  adapt      -> init (deprecated, prints warning)"
+    echo "  dashboard  -> (no args)"
+    echo ""
+    echo "Claude Code Slash Commands:"
+    echo "  /selfmodel:init       Initialize selfmodel"
+    echo "  /selfmodel:plan       Create or update orchestration plan"
+    echo "  /selfmodel:sprint     Create Sprint contract and dispatch agent"
+    echo "  /selfmodel:review     Review a delivered Sprint"
+    echo "  /selfmodel:loop       Auto-orchestration loop"
+    echo "  /selfmodel:status     View team status and quality trends"
+    echo ""
+    echo "Examples:"
+    echo "  selfmodel                                    # Smart dashboard (default)"
+    echo "  selfmodel init                               # Initialize in current directory"
+    echo "  selfmodel init ./my-project                  # Initialize in specific directory"
+    echo "  selfmodel update                             # Update playbook from local templates"
+    echo "  selfmodel update --remote                    # Fetch latest from GitHub"
+    echo "  selfmodel update --remote --version v0.3.0   # Fetch specific version"
+    echo "  selfmodel evolve                             # Interactive evolution pipeline"
+    echo "  selfmodel evolve --detect                    # Detection scan only"
+    echo "  selfmodel evolve --status                    # View evolution pipeline status"
+}
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 main() {
-    local cmd="${1:-help}"
+    local cmd="${1:-dashboard}"
     shift || true
 
     case "$cmd" in
-        init)    check_deps; cmd_init "$@" ;;
-        adapt)   check_deps; cmd_adapt "$@" ;;
-        update)  check_deps; cmd_update "$@" ;;
-        status)  check_deps; cmd_status "$@" ;;
-        evolve)  check_deps; cmd_evolve "$@" ;;
-        version) cmd_version "$@" ;;
-        -v)      cmd_version "$@" ;;
-        --version) cmd_version "$@" ;;
-        help|--help|-h)
-            echo "selfmodel $SELFMODEL_VERSION — AI Agent Team Workflow"
-            echo ""
-            echo "Usage: selfmodel <command> [directory]"
-            echo ""
-            echo "Commands:"
-            echo "  init     Initialize selfmodel in a new or existing project"
-            echo "  adapt    Adapt selfmodel to an existing project (non-destructive)"
-            echo "  update   Update playbook files to latest version"
-            echo "             --remote    Fetch latest from GitHub (instead of local templates)"
-            echo "             --version   Specify version/tag (default: main)"
-            echo "  status   Show team health dashboard"
-            echo "  evolve   Evolution pipeline: detect improvements, classify, submit upstream"
-            echo "             --detect    Scan diffs against upstream baseline (default)"
-            echo "             --status    Show pipeline status, timestamps, PR URLs"
-            echo "             --stage     Interactively classify CANDIDATE entries"
-            echo "             --submit    Submit staged patches as upstream PR"
-            echo "             --track     Monitor submitted PR statuses"
-            echo "  version  Show version"
-            echo ""
-            echo "Examples:"
-            echo "  selfmodel init                       # Initialize in current directory"
-            echo "  selfmodel init ./my-project          # Initialize in specific directory"
-            echo "  selfmodel adapt                      # Adapt to existing project"
-            echo "  selfmodel update                     # Update playbook from local templates"
-            echo "  selfmodel update --remote            # Fetch latest from GitHub (main branch)"
-            echo "  selfmodel update --remote --version v0.3.0  # Fetch specific version"
-            echo "  selfmodel evolve                     # Detect evolution candidates"
-            echo "  selfmodel evolve --status            # View evolution pipeline status"
-            ;;
+        dashboard)       check_deps; cmd_dashboard "$@" ;;
+        init|setup)      check_deps; cmd_init "$@" ;;
+        adapt)           check_deps; cmd_adapt "$@" ;;
+        update|sync)     check_deps; cmd_update "$@" ;;
+        status)          check_deps; cmd_status "$@" ;;
+        evolve)          check_deps; cmd_evolve "$@" ;;
+        version|-v|--version) cmd_version "$@" ;;
+        help|--help|-h)  cmd_help_full ;;
         *)
             err "Unknown command: $cmd"
             err "Run 'selfmodel --help' for usage."

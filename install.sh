@@ -50,30 +50,63 @@ SKILL_COUNT=$(find "${SKILL_DIR}" -type f | wc -l | tr -d ' ')
 CMD_COUNT=$(find "${CMD_DIR}" -type f | wc -l | tr -d ' ')
 
 # Install CLI to PATH
+# Strategy: try /usr/local/bin first, fallback to ~/.local/bin (no sudo needed)
 CLI_SRC="${SRC_DIR}/scripts/selfmodel.sh"
-CLI_TARGET="/usr/local/bin/selfmodel"
+CLI_INSTALLED=false
 if [[ -f "${CLI_SRC}" ]]; then
     chmod +x "${CLI_SRC}"
+
+    # Try 1: /usr/local/bin (system-wide, may need sudo)
     if [[ -w "/usr/local/bin" ]]; then
-        ln -sf "${CLI_SRC}" "${CLI_TARGET}"
-        echo "CLI: selfmodel → ${CLI_TARGET}"
-    elif command -v sudo &>/dev/null; then
-        echo "Installing CLI to /usr/local/bin (may need password)..."
-        sudo ln -sf "${CLI_SRC}" "${CLI_TARGET}" 2>/dev/null && \
-            echo "CLI: selfmodel → ${CLI_TARGET}" || \
-            echo "Skipped CLI install (no sudo). Run manually: sudo ln -sf ${CLI_SRC} ${CLI_TARGET}"
-    else
-        echo "Skipped CLI install. Add to PATH manually:"
-        echo "  ln -sf ${CLI_SRC} /usr/local/bin/selfmodel"
+        ln -sf "${CLI_SRC}" "/usr/local/bin/selfmodel"
+        echo "CLI: selfmodel → /usr/local/bin/selfmodel"
+        CLI_INSTALLED=true
+    elif command -v sudo &>/dev/null && sudo -n true 2>/dev/null; then
+        # sudo available without password prompt (e.g. NOPASSWD configured)
+        sudo ln -sf "${CLI_SRC}" "/usr/local/bin/selfmodel"
+        echo "CLI: selfmodel → /usr/local/bin/selfmodel"
+        CLI_INSTALLED=true
+    fi
+
+    # Try 2: ~/.local/bin (user-local, no sudo needed)
+    if [[ "$CLI_INSTALLED" == "false" ]]; then
+        LOCAL_BIN="${HOME}/.local/bin"
+        mkdir -p "${LOCAL_BIN}"
+        ln -sf "${CLI_SRC}" "${LOCAL_BIN}/selfmodel"
+        echo "CLI: selfmodel → ${LOCAL_BIN}/selfmodel"
+        CLI_INSTALLED=true
+
+        # Ensure ~/.local/bin is in PATH
+        if ! echo "$PATH" | tr ':' '\n' | grep -q "^${LOCAL_BIN}$"; then
+            # Detect shell and add to appropriate rc file
+            SHELL_RC=""
+            if [[ -n "${ZSH_VERSION:-}" ]] || [[ "$(basename "${SHELL:-}")" == "zsh" ]]; then
+                SHELL_RC="${HOME}/.zshrc"
+            elif [[ -n "${BASH_VERSION:-}" ]] || [[ "$(basename "${SHELL:-}")" == "bash" ]]; then
+                SHELL_RC="${HOME}/.bashrc"
+            fi
+
+            if [[ -n "$SHELL_RC" ]]; then
+                if ! grep -q '\.local/bin' "$SHELL_RC" 2>/dev/null; then
+                    echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$SHELL_RC"
+                    echo "  Added ~/.local/bin to PATH in $(basename "$SHELL_RC")"
+                    echo "  Run: source $SHELL_RC   (or open a new terminal)"
+                fi
+            else
+                echo "  Add to your shell profile: export PATH=\"\$HOME/.local/bin:\$PATH\""
+            fi
+        fi
     fi
 fi
 
 echo ""
 echo "Done! ${SKILL_COUNT} skill files + ${CMD_COUNT} commands installed."
 echo ""
-echo "Commands: /selfmodel:init  /selfmodel:sprint  /selfmodel:review"
-echo "          /selfmodel:status  /selfmodel:plan  /selfmodel:loop"
+echo "Quick start:"
+echo "  cd your-project && selfmodel init"
 echo ""
-echo "CLI:      selfmodel init | update --remote | version | status"
+echo "Terminal:  selfmodel              (dashboard)"
+echo "           selfmodel init         (setup)"
+echo "           selfmodel update       (sync)"
 echo ""
-echo "Quick start: cd <your-project> && run /selfmodel:init in Claude Code"
+echo "Claude Code:  /selfmodel:loop     (orchestrate)"

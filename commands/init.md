@@ -1,5 +1,5 @@
 ---
-description: "Initialize selfmodel multi-AI orchestration framework in the current project"
+description: "Initialize selfmodel in current project (prefer CLI: selfmodel init)"
 allowed-tools: ["Read", "Write", "Edit", "Bash", "Glob"]
 argument-hint: "[--force] to reinitialize existing project"
 ---

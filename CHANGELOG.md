@@ -2,6 +2,38 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-04-07
+
+### Added
+- **Project Wiki** — auto-generated knowledge base at `.selfmodel/wiki/`, woven into existing flows:
+  - `selfmodel init` scaffolds wiki with detected module pages and architecture overview
+  - Session-start hook injects wiki/index.md into Leader context
+  - Sprint contracts gain `## Wiki Impact` section for agent wiki updates
+  - Post-merge Step 7.6 detects stale wiki pages from code diffs
+  - `selfmodel status` reports wiki health score (pages, staleness, completeness)
+  - Inspired by [Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
+- **Evolution-to-PR Pipeline** (`selfmodel evolve`) — detect local improvements, classify generalizability, submit upstream PRs:
+  - 5 generalizability heuristics (path detection, project name, generic pattern, hook fix, scoring calibration)
+  - 4-phase pipeline: DETECT → STAGE → SUBMIT → TRACK
+  - Orchestration loop Step 8.5 auto-triggers detection every 10 merged sprints
+  - Human approval gate before any PR submission
+- **Wiki Protocol** (`wiki-protocol.md`) — page format, update rules, lint rules, auto-sync spec
+- **Evolution Protocol** (`evolution-protocol.md`) — full pipeline spec with schema, heuristics, PR template
+
+### Changed
+- **CLI consolidated** — smart dashboard as default (`selfmodel` with no args), idempotent init (absorbs adapt), interactive evolve default, two-tier help
+- **`selfmodel init`** is now idempotent — safe to re-run on existing projects (runs adapt logic)
+- **`selfmodel adapt`** deprecated — prints warning, delegates to `selfmodel init`
+- **`selfmodel evolve`** (no flags) runs full interactive pipeline (detect → stage → offer submit), was detect-only
+- **`selfmodel`** (no args) shows smart dashboard with next-action suggestion, was help text
+- **Help text** split into two tiers: dashboard shows 8-line reference, `--help` shows full detail
+- **README** restructured: 3-step quickstart, Terminal vs Claude Code command tables
+- Slash commands `/selfmodel:init`, `/selfmodel:status`, `/selfmodel:evolve` marked as convenience (CLI preferred)
+
+### Fixed
+- **bash 3.2 compatibility** — replaced `unset 'array[-1]'` (requires bash 4.3+) with portable `_wiki_find_code()` helper for macOS default bash
+- **`cmd_evolve` exit vs return** inconsistency — `exit 1` changed to `return 1`
+
 ## [0.3.0] - 2026-04-05
 
 ### Added

@@ -41,3 +41,7 @@ DRAFT → ACTIVE → DELIVERED → REVIEWED → MERGED | REJECTED
 - Budget: 5m
 - Threshold: resilience >= 70
 (Leader dispatches `/rampage --selfmodel` after E2E PASS, see quality-gates.md Step 4.7)
+
+## Wiki Impact (optional — which wiki pages this Sprint affects)
+- <wiki page path, e.g. wiki/modules/auth.md>
+(Agent updates these pages as part of delivery. Leader validates in post-merge.)
