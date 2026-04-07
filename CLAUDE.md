@@ -350,6 +350,15 @@ selfmodel/
     ├── inbox/evaluator/               # Leader→Evaluator eval files
     ├── inbox/e2e/                     # Leader→E2E Agent v2 验证任务
     ├── artifacts/                     # 验证产物（E2E 截图/日志 + Rampage 韧性报告）
+    ├── wiki/                          # Project knowledge base (auto-managed)
+    │   ├── index.md                   # Content catalog
+    │   ├── log.md                     # Update log (append-only)
+    │   ├── schema.md                  # Page conventions
+    │   ├── architecture.md            # System overview
+    │   ├── modules/                   # Per-module pages
+    │   ├── decisions/                 # Architecture Decision Records
+    │   ├── patterns/                  # Code patterns
+    │   └── entities/                  # Key concepts
     ├── state/team.json                # Team state
     ├── state/next-session.md          # Session handoff
     ├── state/plan.md                  # Orchestration plan (phases + sprints)
