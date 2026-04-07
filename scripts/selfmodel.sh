@@ -395,6 +395,9 @@ cmd_init() {
     # Copy playbook from repo (or generate defaults)
     generate_playbook "$dir"
 
+    # Generate project wiki scaffolding
+    generate_wiki "$dir"
+
     # Generate hooks and merge settings.json
     generate_hooks "$dir"
 
