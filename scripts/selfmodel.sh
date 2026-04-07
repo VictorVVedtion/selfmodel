@@ -2303,6 +2303,686 @@ evolve_detect() {
 }
 
 # Display evolution pipeline status by reading evolution.jsonl.
+# ─── evolve_stage: Interactive classification of CANDIDATE entries ──────────
+evolve_stage() {
+    local dir="$1"
+    local evo_file="$dir/.selfmodel/state/evolution.jsonl"
+    local staging_dir="$dir/.selfmodel/state/evolution-staging"
+
+    if [[ ! -f "$evo_file" ]] || [[ ! -s "$evo_file" ]]; then
+        info "No evolution entries found. Run 'selfmodel evolve --detect' first."
+        return 0
+    fi
+
+    # Collect CANDIDATE entries sorted by generalizability_score descending
+    local candidates
+    candidates=$(jq -c 'select(.status == "CANDIDATE")' "$evo_file" 2>/dev/null \
+        | jq -s 'sort_by(-.generalizability_score)' 2>/dev/null)
+
+    local total
+    total=$(echo "$candidates" | jq 'length' 2>/dev/null)
+
+    if [[ "$total" -eq 0 || "$total" == "null" ]]; then
+        info "No candidates to stage. All entries are already classified."
+        return 0
+    fi
+
+    info "Found $total CANDIDATE entries to classify."
+    echo ""
+
+    local staged_count=0
+    local rejected_count=0
+    local kept_count=0
+
+    # Resolve baseline for diff display
+    local baseline=""
+    baseline=$(evolve_establish_baseline "$dir" 2>/dev/null) || true
+
+    local i=0
+    while [[ $i -lt $total ]]; do
+        local entry
+        entry=$(echo "$candidates" | jq -c ".[$i]")
+
+        local evo_id category source_file summary score reason
+        evo_id=$(echo "$entry" | jq -r '.id')
+        category=$(echo "$entry" | jq -r '.category')
+        source_file=$(echo "$entry" | jq -r '.source_file')
+        summary=$(echo "$entry" | jq -r '.summary')
+        score=$(echo "$entry" | jq -r '.generalizability_score')
+        reason=$(echo "$entry" | jq -r '.generalizability_reason')
+
+        echo "════════════════════════════════════════════════════"
+        printf "[%d/%d] ${BOLD}%s${NC}  %s  score=%s\n" "$((i + 1))" "$total" "$evo_id" "$category" "$score"
+        printf "  File: %s\n" "$source_file"
+        printf "  Summary: %s\n" "$summary"
+        printf "  Reason: %s\n" "$reason"
+
+        # Show diff preview (first 20 lines)
+        if [[ -n "$baseline" ]]; then
+            echo "────────────────────────────────────────────────────"
+            echo "  Diff preview (first 20 lines):"
+            local diff_preview
+            diff_preview=$(git -C "$dir" diff "${baseline}..HEAD" -- "$source_file" 2>/dev/null | head -20) || true
+            if [[ -n "$diff_preview" ]]; then
+                printf '%s\n' "$diff_preview" | sed 's/^/  /'
+            else
+                echo "  (no diff available — file may be new or baseline unreachable)"
+            fi
+        fi
+        echo "────────────────────────────────────────────────────"
+
+        # Heuristic recommendation
+        local recommend
+        if awk "BEGIN {exit !($score >= 0.6)}"; then
+            recommend="${GREEN}Recommend: Stage${NC}"
+        else
+            recommend="${YELLOW}Recommend: Skip${NC}"
+        fi
+        printf "  %b\n" "$recommend"
+
+        # Interactive prompt
+        printf "${CYAN}[selfmodel]${NC} [S]tage / [R]eject / [K]eep? "
+        read -r choice
+
+        case "${choice,,}" in
+            s|stage)
+                # Update status to STAGED in evolution.jsonl
+                local timestamp
+                timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+                local tmp_evo
+                tmp_evo=$(mktemp)
+                while IFS= read -r line; do
+                    local line_id
+                    line_id=$(echo "$line" | jq -r '.id' 2>/dev/null)
+                    if [[ "$line_id" == "$evo_id" ]]; then
+                        echo "$line" | jq -c --arg ts "$timestamp" \
+                            '.status = "STAGED" | .staged_at = $ts'
+                    else
+                        echo "$line"
+                    fi
+                done < "$evo_file" > "$tmp_evo"
+                mv "$tmp_evo" "$evo_file"
+
+                # Generate patch and metadata in staging directory
+                local entry_staging_dir="${staging_dir}/${evo_id}"
+                mkdir -p "$entry_staging_dir"
+
+                # Generate patch.diff
+                if [[ -n "$baseline" ]]; then
+                    git -C "$dir" diff "${baseline}..HEAD" -- "$source_file" \
+                        > "${entry_staging_dir}/patch.diff" 2>/dev/null || true
+                fi
+
+                # Strip project-specific content from patch
+                if [[ -f "${entry_staging_dir}/patch.diff" ]]; then
+                    local project_root
+                    project_root=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || echo "$dir")
+                    # Replace absolute paths with placeholder
+                    sed_inplace "s|${project_root}|<project-root>|g" "${entry_staging_dir}/patch.diff"
+                    # Replace home directory paths
+                    if [[ -n "${HOME:-}" ]]; then
+                        sed_inplace "s|${HOME}|~|g" "${entry_staging_dir}/patch.diff"
+                    fi
+                fi
+
+                # Write metadata.json
+                local description evidence_json
+                description=$(echo "$entry" | jq -r '.description')
+                evidence_json=$(echo "$entry" | jq -c '.evidence')
+                jq -cn \
+                    --arg id "$evo_id" \
+                    --arg category "$category" \
+                    --arg summary "$summary" \
+                    --arg description "$description" \
+                    --argjson evidence "$evidence_json" \
+                    --argjson score "$score" \
+                    --arg reason "$reason" \
+                    --arg source_file "$source_file" \
+                    --arg staged_at "$timestamp" \
+                    '{
+                        id: $id,
+                        category: $category,
+                        summary: $summary,
+                        description: $description,
+                        evidence: $evidence,
+                        generalizability_score: $score,
+                        generalizability_reason: $reason,
+                        source_file: $source_file,
+                        staged_at: $staged_at
+                    }' > "${entry_staging_dir}/metadata.json"
+
+                ok "Staged: $evo_id → ${entry_staging_dir}/"
+                staged_count=$((staged_count + 1))
+                ;;
+            r|reject)
+                # Update status to REJECTED_PROJECT_SPECIFIC
+                local tmp_evo
+                tmp_evo=$(mktemp)
+                while IFS= read -r line; do
+                    local line_id
+                    line_id=$(echo "$line" | jq -r '.id' 2>/dev/null)
+                    if [[ "$line_id" == "$evo_id" ]]; then
+                        echo "$line" | jq -c '.status = "REJECTED_PROJECT_SPECIFIC"'
+                    else
+                        echo "$line"
+                    fi
+                done < "$evo_file" > "$tmp_evo"
+                mv "$tmp_evo" "$evo_file"
+
+                warn "Rejected: $evo_id (project-specific)"
+                rejected_count=$((rejected_count + 1))
+                ;;
+            k|keep|"")
+                info "Kept: $evo_id (will revisit later)"
+                kept_count=$((kept_count + 1))
+                ;;
+            *)
+                warn "Unknown choice '$choice', keeping as CANDIDATE."
+                kept_count=$((kept_count + 1))
+                ;;
+        esac
+
+        echo ""
+        i=$((i + 1))
+    done
+
+    echo "════════════════════════════════════════════════════"
+    ok "Stage complete: $staged_count staged, $rejected_count rejected, $kept_count kept"
+}
+
+# ─── evolve_submit: Create upstream PR from STAGED patches ──────────────────
+evolve_submit() {
+    local dir="$1"
+    local evo_file="$dir/.selfmodel/state/evolution.jsonl"
+    local staging_dir="$dir/.selfmodel/state/evolution-staging"
+
+    # Pre-check: gh CLI available
+    if ! command -v gh &>/dev/null; then
+        err "gh CLI is required for PR submission."
+        err "Install: https://cli.github.com/"
+        return 1
+    fi
+
+    # Pre-check: gh authenticated
+    if ! gh auth status &>/dev/null 2>&1; then
+        err "gh CLI not authenticated. Run 'gh auth login' first."
+        return 1
+    fi
+
+    if [[ ! -f "$evo_file" ]] || [[ ! -s "$evo_file" ]]; then
+        info "No evolution entries found."
+        return 0
+    fi
+
+    # Collect STAGED entries
+    local staged_entries
+    staged_entries=$(jq -c 'select(.status == "STAGED")' "$evo_file" 2>/dev/null \
+        | jq -s '.' 2>/dev/null)
+
+    local staged_count
+    staged_count=$(echo "$staged_entries" | jq 'length' 2>/dev/null)
+
+    if [[ "$staged_count" -eq 0 || "$staged_count" == "null" ]]; then
+        info "No staged entries to submit. Run 'selfmodel evolve --stage' first."
+        return 0
+    fi
+
+    info "Found $staged_count STAGED entries for submission."
+
+    # ── Pre-submission checks ────────────────────────────────────────────────
+    local precheck_failed=false
+
+    # Lint .sh patches with shell checker
+    local i=0
+    while [[ $i -lt $staged_count ]]; do
+        local entry
+        entry=$(echo "$staged_entries" | jq -c ".[$i]")
+        local evo_id source_file
+        evo_id=$(echo "$entry" | jq -r '.id')
+        source_file=$(echo "$entry" | jq -r '.source_file')
+
+        if [[ "$source_file" == *.sh ]]; then
+            local patch_dir="${staging_dir}/${evo_id}"
+            if [[ -f "${patch_dir}/patch.diff" ]]; then
+                # Check if lint tool is available
+                if command -v shellcheck &>/dev/null; then
+                    # Run lint on the source file
+                    local tmp_file
+                    tmp_file=$(mktemp)
+                    if [[ -f "$dir/$source_file" ]]; then
+                        cp "$dir/$source_file" "$tmp_file"
+                        if ! shellcheck -S warning "$tmp_file" &>/dev/null; then
+                            warn "Shell lint warnings in $source_file (evo: $evo_id)"
+                            shellcheck -S warning "$tmp_file" 2>&1 | head -20
+                            precheck_failed=true
+                        fi
+                    fi
+                    rm -f "$tmp_file"
+                fi
+            fi
+        fi
+
+        i=$((i + 1))
+    done
+
+    # Path audit: scan patches for absolute paths, secrets patterns
+    i=0
+    while [[ $i -lt $staged_count ]]; do
+        local entry
+        entry=$(echo "$staged_entries" | jq -c ".[$i]")
+        local evo_id
+        evo_id=$(echo "$entry" | jq -r '.id')
+        local patch_file="${staging_dir}/${evo_id}/patch.diff"
+
+        if [[ -f "$patch_file" ]]; then
+            # Check for absolute paths (excluding <project-root> placeholders)
+            local abs_paths
+            abs_paths=$(grep -nE '^\+.*(/Users/|/home/|/var/|/opt/|/srv/)' "$patch_file" 2>/dev/null \
+                | grep -v '<project-root>' || true)
+            if [[ -n "$abs_paths" ]]; then
+                warn "Absolute paths found in $evo_id patch:"
+                printf '%s\n' "$abs_paths" | head -5
+                precheck_failed=true
+            fi
+
+            # Check for secrets patterns
+            local secrets
+            secrets=$(grep -niE '(API_KEY|TOKEN|PASSWORD|SECRET|CREDENTIAL|PRIVATE_KEY)=' "$patch_file" 2>/dev/null \
+                | grep '^+' || true)
+            if [[ -n "$secrets" ]]; then
+                err "Potential secrets found in $evo_id patch:"
+                printf '%s\n' "$secrets" | head -5
+                precheck_failed=true
+            fi
+        fi
+
+        i=$((i + 1))
+    done
+
+    if [[ "$precheck_failed" == "true" ]]; then
+        warn "Pre-submission checks found issues."
+        printf "${CYAN}[selfmodel]${NC} Continue despite warnings? [y/N] "
+        read -r reply
+        if [[ ! "$reply" =~ ^[Yy] ]]; then
+            info "Submission aborted. Fix issues and re-run."
+            return 0
+        fi
+    fi
+
+    # ── PR Preview ───────────────────────────────────────────────────────────
+    local project_name
+    project_name=$(git -C "$dir" remote get-url origin 2>/dev/null \
+        | sed 's/.*\///' | sed 's/\.git$//' || basename "$dir")
+
+    local sm_version="$SELFMODEL_VERSION"
+    if [[ -f "$dir/VERSION" ]]; then
+        sm_version=$(tr -d '[:space:]' < "$dir/VERSION")
+    fi
+
+    local current_sprint=0
+    if [[ -f "$dir/.selfmodel/state/team.json" ]]; then
+        current_sprint=$(jq -r '.current_sprint // 0' "$dir/.selfmodel/state/team.json" 2>/dev/null || echo 0)
+    fi
+
+    local pr_title="feat(evolution): improvements from ${project_name} (${staged_count} changes)"
+
+    echo ""
+    echo "════════════════════════════════════════════════════"
+    echo "  PR Preview"
+    echo "════════════════════════════════════════════════════"
+    printf "  Title: %s\n" "$pr_title"
+    echo "  Changes:"
+    echo "────────────────────────────────────────────────────"
+    printf "  %-4s %-22s %-30s %s\n" "#" "Category" "File" "Score"
+
+    i=0
+    while [[ $i -lt $staged_count ]]; do
+        local entry
+        entry=$(echo "$staged_entries" | jq -c ".[$i]")
+        local evo_id category source_file score
+        evo_id=$(echo "$entry" | jq -r '.id')
+        category=$(echo "$entry" | jq -r '.category')
+        source_file=$(echo "$entry" | jq -r '.source_file')
+        score=$(echo "$entry" | jq -r '.generalizability_score')
+        printf "  %-4d %-22s %-30s %s\n" "$((i + 1))" "$category" "$source_file" "$score"
+        i=$((i + 1))
+    done
+
+    echo "════════════════════════════════════════════════════"
+    echo ""
+
+    # ── Human confirmation gate ──────────────────────────────────────────────
+    printf "${CYAN}[selfmodel]${NC} Submit PR to upstream? [y/N] "
+    read -r submit_reply
+    if [[ ! "$submit_reply" =~ ^[Yy] ]]; then
+        info "Submission cancelled. Entries remain STAGED."
+        return 0
+    fi
+
+    # ── Build PR body ────────────────────────────────────────────────────────
+    local pr_body
+    pr_body="## Summary"$'\n'$'\n'
+    pr_body+="Community-discovered improvements from project usage (${project_name}, sprint ${current_sprint})."$'\n'$'\n'
+    pr_body+="These changes were detected by selfmodel's evolution pipeline, classified as"$'\n'
+    pr_body+="generalizable by heuristic analysis, and verified against local sprint data."$'\n'$'\n'
+    pr_body+="## Changes"$'\n'$'\n'
+    pr_body+="| # | Category | File | Summary | Score |"$'\n'
+    pr_body+="|---|----------|------|---------|-------|"$'\n'
+
+    i=0
+    while [[ $i -lt $staged_count ]]; do
+        local entry
+        entry=$(echo "$staged_entries" | jq -c ".[$i]")
+        local summary category upstream_file score
+        summary=$(echo "$entry" | jq -r '.summary')
+        category=$(echo "$entry" | jq -r '.category')
+        upstream_file=$(echo "$entry" | jq -r '.upstream_file')
+        score=$(echo "$entry" | jq -r '.generalizability_score')
+        pr_body+="| $((i + 1)) | ${category} | ${upstream_file} | ${summary} | ${score} |"$'\n'
+        i=$((i + 1))
+    done
+
+    pr_body+=$'\n'"## Per-Change Details"$'\n'
+
+    i=0
+    while [[ $i -lt $staged_count ]]; do
+        local entry
+        entry=$(echo "$staged_entries" | jq -c ".[$i]")
+        local evo_id summary category heuristic score reason description diff_stats
+        local sprints_affected quality_trend hook_intercepts lessons_ref
+        evo_id=$(echo "$entry" | jq -r '.id')
+        summary=$(echo "$entry" | jq -r '.summary')
+        category=$(echo "$entry" | jq -r '.category')
+        heuristic=$(echo "$entry" | jq -r '.heuristic')
+        score=$(echo "$entry" | jq -r '.generalizability_score')
+        reason=$(echo "$entry" | jq -r '.generalizability_reason')
+        description=$(echo "$entry" | jq -r '.description')
+        diff_stats=$(echo "$entry" | jq -r '.diff_stats')
+        sprints_affected=$(echo "$entry" | jq -r '.evidence.sprints_affected // []')
+        quality_trend=$(echo "$entry" | jq -r '.evidence.quality_trend // "N/A"')
+        hook_intercepts=$(echo "$entry" | jq -r '.evidence.hook_intercepts // 0')
+        lessons_ref=$(echo "$entry" | jq -r '.evidence.lessons_learned_ref // "N/A"')
+
+        pr_body+=$'\n'"### Change $((i + 1)): ${summary}"$'\n'$'\n'
+        pr_body+="**ID**: ${evo_id}"$'\n'
+        pr_body+="**Category**: ${category}"$'\n'
+        pr_body+="**Heuristic**: ${heuristic} (score: ${score})"$'\n'
+        pr_body+="**Reason**: ${reason}"$'\n'$'\n'
+        pr_body+="**What changed**: ${description}"$'\n'$'\n'
+        pr_body+="**Evidence**:"$'\n'
+        pr_body+="- Sprints affected: ${sprints_affected}"$'\n'
+        pr_body+="- Quality trend: ${quality_trend}"$'\n'
+        pr_body+="- Hook intercepts: ${hook_intercepts}"$'\n'
+        pr_body+="- Lessons learned ref: ${lessons_ref}"$'\n'$'\n'
+        pr_body+="**Diff stats**: ${diff_stats}"$'\n'
+        pr_body+=$'\n'"---"$'\n'
+
+        i=$((i + 1))
+    done
+
+    pr_body+=$'\n'"## Testing"$'\n'$'\n'
+    pr_body+="- [ ] shellcheck passes on all modified .sh files"$'\n'
+    pr_body+="- [ ] \`selfmodel status\` runs without errors after applying changes"$'\n'
+    pr_body+="- [ ] No absolute paths or project-specific names in submitted code"$'\n'
+    pr_body+="- [ ] Patches apply cleanly to upstream HEAD"$'\n'$'\n'
+    pr_body+="## Context"$'\n'$'\n'
+    pr_body+="- selfmodel version: ${sm_version}"$'\n'
+    pr_body+="- Project sprint count: ${current_sprint}"$'\n'
+    pr_body+="- Evolution entries: ${staged_count}"$'\n'
+
+    # ── Create PR via gh ─────────────────────────────────────────────────────
+
+    # Determine upstream repo from remote
+    local upstream_repo
+    upstream_repo=$(git -C "$dir" remote get-url upstream 2>/dev/null \
+        | sed 's|.*github\.com[:/]||' | sed 's/\.git$//') || true
+
+    if [[ -z "$upstream_repo" ]]; then
+        # Fall back to origin if no upstream remote
+        upstream_repo=$(git -C "$dir" remote get-url origin 2>/dev/null \
+            | sed 's|.*github\.com[:/]||' | sed 's/\.git$//') || true
+    fi
+
+    if [[ -z "$upstream_repo" ]]; then
+        err "Could not determine upstream repository URL."
+        return 1
+    fi
+
+    # Create a branch for the PR
+    local branch_date
+    branch_date=$(date -u +%Y%m%d)
+    local branch_name="evolution/${project_name}-${branch_date}"
+
+    info "Creating branch: $branch_name"
+    if ! git -C "$dir" checkout -b "$branch_name" 2>/dev/null; then
+        warn "Branch $branch_name may already exist. Attempting to use it."
+        git -C "$dir" checkout "$branch_name" 2>/dev/null || {
+            err "Failed to create or switch to branch $branch_name"
+            return 1
+        }
+    fi
+
+    # Apply staged patches
+    local apply_failed=false
+    i=0
+    while [[ $i -lt $staged_count ]]; do
+        local entry
+        entry=$(echo "$staged_entries" | jq -c ".[$i]")
+        local evo_id
+        evo_id=$(echo "$entry" | jq -r '.id')
+        local patch_file="${staging_dir}/${evo_id}/patch.diff"
+
+        if [[ -f "$patch_file" ]] && [[ -s "$patch_file" ]]; then
+            if ! git -C "$dir" apply --check "$patch_file" 2>/dev/null; then
+                warn "Patch $evo_id does not apply cleanly. Skipping."
+                apply_failed=true
+            else
+                git -C "$dir" apply "$patch_file" 2>/dev/null || {
+                    warn "Failed to apply patch $evo_id."
+                    apply_failed=true
+                }
+            fi
+        fi
+
+        i=$((i + 1))
+    done
+
+    if [[ "$apply_failed" == "true" ]]; then
+        warn "Some patches did not apply. PR will include only successfully applied changes."
+    fi
+
+    # Commit applied changes
+    git -C "$dir" add -A 2>/dev/null || true
+    local has_changes
+    has_changes=$(git -C "$dir" diff --cached --name-only 2>/dev/null)
+
+    if [[ -z "$has_changes" ]]; then
+        warn "No changes to commit after applying patches."
+        git -C "$dir" checkout - 2>/dev/null || true
+        return 0
+    fi
+
+    git -C "$dir" commit -m "feat(evolution): ${staged_count} improvements from ${project_name}" 2>/dev/null || {
+        err "Failed to commit changes."
+        git -C "$dir" checkout - 2>/dev/null || true
+        return 1
+    }
+
+    # Push and create PR
+    info "Pushing branch and creating PR..."
+    git -C "$dir" push -u origin "$branch_name" 2>/dev/null || {
+        err "Failed to push branch. Check your git remote configuration."
+        git -C "$dir" checkout - 2>/dev/null || true
+        return 1
+    }
+
+    local pr_url
+    pr_url=$(gh pr create \
+        --repo "$upstream_repo" \
+        --title "$pr_title" \
+        --body "$pr_body" \
+        --head "$branch_name" 2>&1) || {
+        err "Failed to create PR: $pr_url"
+        git -C "$dir" checkout - 2>/dev/null || true
+        return 1
+    }
+
+    ok "PR created: $pr_url"
+
+    # Return to previous branch
+    git -C "$dir" checkout - 2>/dev/null || true
+
+    # ── Update evolution.jsonl: STAGED → SUBMITTED ───────────────────────────
+    local submit_timestamp
+    submit_timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+    local tmp_evo
+    tmp_evo=$(mktemp)
+    while IFS= read -r line; do
+        local line_status
+        line_status=$(echo "$line" | jq -r '.status' 2>/dev/null)
+        if [[ "$line_status" == "STAGED" ]]; then
+            echo "$line" | jq -c \
+                --arg ts "$submit_timestamp" \
+                --arg url "$pr_url" \
+                '.status = "SUBMITTED" | .submitted_at = $ts | .pr_url = $url | .pr_status = "open"'
+        else
+            echo "$line"
+        fi
+    done < "$evo_file" > "$tmp_evo"
+    mv "$tmp_evo" "$evo_file"
+
+    ok "Updated $staged_count entries to SUBMITTED status."
+}
+
+# ─── evolve_track: Monitor submitted PR statuses ───────────────────────────
+evolve_track() {
+    local dir="$1"
+    local evo_file="$dir/.selfmodel/state/evolution.jsonl"
+
+    # Check gh CLI availability
+    if ! command -v gh &>/dev/null; then
+        err "gh CLI is required for PR tracking."
+        err "Install: https://cli.github.com/"
+        return 1
+    fi
+
+    if [[ ! -f "$evo_file" ]] || [[ ! -s "$evo_file" ]]; then
+        info "No evolution entries found."
+        return 0
+    fi
+
+    # Collect SUBMITTED entries with pr_url
+    local submitted
+    submitted=$(jq -c 'select(.status == "SUBMITTED" and .pr_url != null)' "$evo_file" 2>/dev/null \
+        | jq -s '.' 2>/dev/null)
+
+    local total
+    total=$(echo "$submitted" | jq 'length' 2>/dev/null)
+
+    if [[ "$total" -eq 0 || "$total" == "null" ]]; then
+        info "No submitted PRs to track."
+        return 0
+    fi
+
+    info "Tracking $total submitted PRs..."
+
+    local accepted_count=0
+    local rejected_count=0
+    local pending_count=0
+
+    local i=0
+    while [[ $i -lt $total ]]; do
+        local entry
+        entry=$(echo "$submitted" | jq -c ".[$i]")
+        local evo_id pr_url
+        evo_id=$(echo "$entry" | jq -r '.id')
+        pr_url=$(echo "$entry" | jq -r '.pr_url')
+
+        # Query PR status via gh
+        local pr_json
+        pr_json=$(gh pr view "$pr_url" --json state,mergedAt,reviews 2>/dev/null) || {
+            warn "Could not query PR status for $evo_id ($pr_url)"
+            pending_count=$((pending_count + 1))
+            i=$((i + 1))
+            continue
+        }
+
+        local pr_state
+        pr_state=$(echo "$pr_json" | jq -r '.state // "UNKNOWN"' 2>/dev/null)
+
+        local new_status=""
+        local new_pr_status=""
+        local reviewed_by=""
+
+        case "$pr_state" in
+            MERGED)
+                new_status="ACCEPTED"
+                new_pr_status="merged"
+                reviewed_by=$(echo "$pr_json" | jq -r '[.reviews[]?.author.login // empty] | unique | join(",")' 2>/dev/null) || true
+                accepted_count=$((accepted_count + 1))
+                ok "$evo_id: ACCEPTED (merged)"
+                ;;
+            CLOSED)
+                new_status="REJECTED_UPSTREAM"
+                new_pr_status="closed"
+                reviewed_by=$(echo "$pr_json" | jq -r '[.reviews[]?.author.login // empty] | unique | join(",")' 2>/dev/null) || true
+                rejected_count=$((rejected_count + 1))
+                warn "$evo_id: REJECTED_UPSTREAM (closed without merge)"
+                ;;
+            OPEN)
+                # Check if changes requested
+                local has_changes_requested
+                has_changes_requested=$(echo "$pr_json" | jq '[.reviews[]? | select(.state == "CHANGES_REQUESTED")] | length' 2>/dev/null) || true
+                if [[ "$has_changes_requested" -gt 0 ]]; then
+                    new_pr_status="changes_requested"
+                    info "$evo_id: open (changes requested — needs attention)"
+                else
+                    new_pr_status="open"
+                    info "$evo_id: open (pending review)"
+                fi
+                pending_count=$((pending_count + 1))
+                ;;
+            *)
+                info "$evo_id: unknown state ($pr_state)"
+                pending_count=$((pending_count + 1))
+                ;;
+        esac
+
+        # Update evolution.jsonl if status changed
+        if [[ -n "$new_status" || -n "$new_pr_status" ]]; then
+            local tmp_evo
+            tmp_evo=$(mktemp)
+            while IFS= read -r line; do
+                local line_id
+                line_id=$(echo "$line" | jq -r '.id' 2>/dev/null)
+                if [[ "$line_id" == "$evo_id" ]]; then
+                    local updated_line="$line"
+                    if [[ -n "$new_status" ]]; then
+                        updated_line=$(echo "$updated_line" | jq -c --arg s "$new_status" '.status = $s')
+                    fi
+                    if [[ -n "$new_pr_status" ]]; then
+                        updated_line=$(echo "$updated_line" | jq -c --arg ps "$new_pr_status" '.pr_status = $ps')
+                    fi
+                    if [[ -n "$reviewed_by" ]]; then
+                        updated_line=$(echo "$updated_line" | jq -c --arg rb "$reviewed_by" '.reviewed_by = $rb')
+                    fi
+                    echo "$updated_line"
+                else
+                    echo "$line"
+                fi
+            done < "$evo_file" > "$tmp_evo"
+            mv "$tmp_evo" "$evo_file"
+        fi
+
+        i=$((i + 1))
+    done
+
+    echo "────────────────────────────────────────────────────"
+    ok "Tracked $total PRs: $accepted_count accepted, $rejected_count rejected, $pending_count pending"
+}
+
+# ─── evolve_status: Display evolution pipeline status ───────────────────────
 evolve_status() {
     local dir="$1"
     local evo_file="$dir/.selfmodel/state/evolution.jsonl"
@@ -2314,27 +2994,54 @@ evolve_status() {
     fi
 
     echo "Evolution Pipeline Status"
-    echo "─────────────────────────"
+    echo "═════════════════════════════════════════"
 
     # Count by status
     local statuses=("CANDIDATE" "STAGED" "SUBMITTED" "ACCEPTED" "REJECTED_PROJECT_SPECIFIC" "REJECTED_UPSTREAM" "CONFLICT" "SUPERSEDED")
+    local total_entries=0
     for status in "${statuses[@]}"; do
         local count
         count=$(jq -r "select(.status == \"$status\") | .id" "$evo_file" 2>/dev/null | wc -l | tr -d ' ')
         if [[ "$count" -gt 0 ]]; then
-            printf '%-30s %d\n' "${status}:" "$count"
+            printf '  %-30s %d\n' "${status}:" "$count"
+            total_entries=$((total_entries + count))
         fi
     done
+    echo "  ─────────────────────────────────"
+    printf '  %-30s %d\n' "Total:" "$total_entries"
 
-    echo "─────────────────────────"
+    echo "═════════════════════════════════════════"
+
+    # Timestamps section
+    echo "Timestamps"
+    echo "─────────────────────────────────────────"
 
     # Last detect info
     local last_detect_sprint last_detect_date
     last_detect_sprint=$(jq -r '.detected_at_sprint // 0' "$evo_file" 2>/dev/null | sort -rn | head -1)
     last_detect_date=$(jq -r '.detected_at // ""' "$evo_file" 2>/dev/null | sort -r | head -1)
-    if [[ -n "$last_detect_date" ]]; then
-        local date_part="${last_detect_date%%T*}"
-        printf 'Last detect: Sprint %s (%s)\n' "$last_detect_sprint" "$date_part"
+    if [[ -n "$last_detect_date" && "$last_detect_date" != "null" ]]; then
+        printf '  Last detect:  Sprint %s (%s)\n' "$last_detect_sprint" "${last_detect_date%%T*}"
+    else
+        echo "  Last detect:  N/A"
+    fi
+
+    # Last submit timestamp
+    local last_submit_date
+    last_submit_date=$(jq -r 'select(.submitted_at != null) | .submitted_at' "$evo_file" 2>/dev/null | sort -r | head -1)
+    if [[ -n "$last_submit_date" && "$last_submit_date" != "null" ]]; then
+        printf '  Last submit:  %s\n' "${last_submit_date%%T*}"
+    else
+        echo "  Last submit:  N/A"
+    fi
+
+    # Last staged timestamp
+    local last_staged_date
+    last_staged_date=$(jq -r 'select(.staged_at != null) | .staged_at' "$evo_file" 2>/dev/null | sort -r | head -1)
+    if [[ -n "$last_staged_date" && "$last_staged_date" != "null" ]]; then
+        printf '  Last staged:  %s\n' "${last_staged_date%%T*}"
+    else
+        echo "  Last staged:  N/A"
     fi
 
     # Next detect estimate (every 10 sprints)
@@ -2344,11 +3051,47 @@ evolve_status() {
         last_review=$(jq -r '.evolution.last_review_sprint // 0' "$team_file" 2>/dev/null)
         local next_detect=$((last_review + 10))
         if [[ "$next_detect" -le "$current_sprint" ]]; then
-            echo "Next detect: now (overdue)"
+            echo "  Next detect:  now (overdue)"
         else
-            printf 'Next detect: ~Sprint %d\n' "$next_detect"
+            printf '  Next detect:  ~Sprint %d\n' "$next_detect"
         fi
     fi
+
+    # Submitted PRs section
+    local submitted_prs
+    submitted_prs=$(jq -c 'select(.pr_url != null)' "$evo_file" 2>/dev/null | jq -s '.' 2>/dev/null)
+    local pr_count
+    pr_count=$(echo "$submitted_prs" | jq 'length' 2>/dev/null)
+
+    if [[ "$pr_count" -gt 0 && "$pr_count" != "null" ]]; then
+        echo "═════════════════════════════════════════"
+        echo "Submitted PRs"
+        echo "─────────────────────────────────────────"
+
+        local j=0
+        while [[ $j -lt $pr_count ]]; do
+            local pr_entry
+            pr_entry=$(echo "$submitted_prs" | jq -c ".[$j]")
+            local evo_id pr_url pr_status
+            evo_id=$(echo "$pr_entry" | jq -r '.id')
+            pr_url=$(echo "$pr_entry" | jq -r '.pr_url')
+            pr_status=$(echo "$pr_entry" | jq -r '.pr_status // "unknown"')
+
+            local status_icon
+            case "$pr_status" in
+                open)    status_icon="🔵" ;;
+                merged)  status_icon="🟢" ;;
+                closed)  status_icon="🔴" ;;
+                changes_requested) status_icon="🟡" ;;
+                *)       status_icon="⚪" ;;
+            esac
+
+            printf '  %s %-24s %s  %s\n' "$status_icon" "$evo_id" "$pr_status" "$pr_url"
+            j=$((j + 1))
+        done
+    fi
+
+    echo "═════════════════════════════════════════"
 }
 
 # Main evolve command: parse flags and route.
@@ -2363,16 +3106,19 @@ cmd_evolve() {
         echo "  --detect     Scan playbook/hooks/scripts diffs against upstream baseline"
         echo "               Writes CANDIDATE entries to .selfmodel/state/evolution.jsonl"
         echo "               This is the default action when no flag is specified."
-        echo "  --status     Show evolution pipeline status (counts by lifecycle state)"
-        echo "  --stage      Interactively classify CANDIDATE entries (not yet implemented)"
-        echo "  --submit     Create upstream PR from STAGED patches (not yet implemented)"
-        echo "  --track      Monitor submitted PR statuses (not yet implemented)"
+        echo "  --status     Show evolution pipeline status (counts, timestamps, PR URLs)"
+        echo "  --stage      Interactively classify CANDIDATE entries (Stage/Reject/Keep)"
+        echo "  --submit     Create upstream PR from STAGED patches (requires gh CLI)"
+        echo "  --track      Monitor submitted PR statuses via gh CLI"
         echo "  --help       Show this help message"
         echo ""
         echo "Examples:"
         echo "  selfmodel evolve                 # Run detection (default)"
         echo "  selfmodel evolve --detect        # Explicit detection scan"
         echo "  selfmodel evolve --status        # View pipeline status"
+        echo "  selfmodel evolve --stage         # Classify candidates interactively"
+        echo "  selfmodel evolve --submit        # Submit staged patches as PR"
+        echo "  selfmodel evolve --track         # Check PR status updates"
         return 0
     }
 
@@ -2384,18 +3130,9 @@ cmd_evolve() {
         case "$1" in
             --detect)  action="detect"; shift ;;
             --status)  action="status"; shift ;;
-            --stage)
-                info "Stage phase not yet implemented — see Sprint C."
-                return 0
-                ;;
-            --submit)
-                info "Submit phase not yet implemented — see Sprint C."
-                return 0
-                ;;
-            --track)
-                info "Track phase not yet implemented — see Sprint C."
-                return 0
-                ;;
+            --stage)   action="stage"; shift ;;
+            --submit)  action="submit"; shift ;;
+            --track)   action="track"; shift ;;
             *)  dir="$1"; shift ;;
         esac
     done
@@ -2407,8 +3144,11 @@ cmd_evolve() {
     fi
 
     case "$action" in
-        detect) evolve_detect "$dir" ;;
-        status) evolve_status "$dir" ;;
+        detect)  evolve_detect "$dir" ;;
+        status)  evolve_status "$dir" ;;
+        stage)   evolve_stage "$dir" ;;
+        submit)  evolve_submit "$dir" ;;
+        track)   evolve_track "$dir" ;;
         *)
             err "Unknown evolve action: $action"
             return 1
@@ -2444,9 +3184,10 @@ main() {
             echo "  status   Show team health dashboard"
             echo "  evolve   Evolution pipeline: detect improvements, classify, submit upstream"
             echo "             --detect    Scan diffs against upstream baseline (default)"
-            echo "             --status    Show pipeline status counts"
-            echo "             --stage     Classify candidates (Sprint C)"
-            echo "             --submit    Submit PRs upstream (Sprint C)"
+            echo "             --status    Show pipeline status, timestamps, PR URLs"
+            echo "             --stage     Interactively classify CANDIDATE entries"
+            echo "             --submit    Submit staged patches as upstream PR"
+            echo "             --track     Monitor submitted PR statuses"
             echo "  version  Show version"
             echo ""
             echo "Examples:"
