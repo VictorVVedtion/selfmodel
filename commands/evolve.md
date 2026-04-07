@@ -1,7 +1,7 @@
 ---
 description: "Evolution-to-PR pipeline: detect local improvements, classify, and submit upstream"
 allowed-tools: ["Read", "Write", "Edit", "Bash", "Glob", "Grep"]
-argument-hint: "[--detect] [--stage] [--stage] [--submit] [--track] [--status]"
+argument-hint: "[--detect] [--stage] [--submit] [--track] [--status]"
 ---
 
 # /selfmodel:evolve
