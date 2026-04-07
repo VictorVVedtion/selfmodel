@@ -220,6 +220,16 @@ LOOP:
      - Append to quality.jsonl
      - Append to orchestration.log
 
+  8.5. EVOLUTION CHECK (every 10 MERGED Sprints)
+       a. Read team.json → evolution.last_review_sprint
+       b. Count MERGED sprints since last review (from quality.jsonl or plan.md)
+       c. If count >= 10:
+          i.   Run evolution detection (equivalent to selfmodel evolve --detect)
+          ii.  Log: phase=<N> event=evolution_detect candidates=<N>
+          iii. If candidates > 0: notify user "N evolution candidates. Run /selfmodel:evolve"
+          iv.  Update team.json: evolution.last_review_sprint = current_sprint
+       d. If count < 10: skip
+
   9. CHECK context health
      - Phase boundary (all sprints in current phase MERGED) → Phase Gate → FORCE RESET
      - Context > 70% → FORCE RESET
