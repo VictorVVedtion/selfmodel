@@ -831,7 +831,7 @@ cmd_status() {
     echo "────────────────────────────────────────────────────"
     local playbook_files=("dispatch-rules.md" "quality-gates.md" "sprint-template.md" \
         "evaluator-prompt.md" "e2e-protocol.md" "e2e-protocol-v2.md" "orchestration-loop.md" \
-        "research-protocol.md" "context-protocol.md" "lessons-learned.md")
+        "research-protocol.md" "context-protocol.md" "lessons-learned.md" "wiki-protocol.md")
     local missing=0
     for f in "${playbook_files[@]}"; do
         if [[ ! -f "$selfmodel_dir/playbook/$f" ]]; then
@@ -841,6 +841,61 @@ cmd_status() {
     done
     if [[ $missing -eq 0 ]]; then
         ok "Playbook: all ${#playbook_files[@]} files present"
+    fi
+
+    # Wiki health
+    echo "────────────────────────────────────────────────────"
+    local wiki_dir="$selfmodel_dir/wiki"
+    if [[ -d "$wiki_dir" ]]; then
+        local wiki_pages wiki_modules wiki_stale wiki_empty wiki_score
+
+        # Count all .md pages (excluding log.md which is append-only)
+        wiki_pages=$(find "$wiki_dir" -name "*.md" ! -name "log.md" 2>/dev/null | wc -l | tr -d ' ')
+
+        # Count module pages
+        wiki_modules=0
+        if [[ -d "$wiki_dir/modules" ]]; then
+            wiki_modules=$(find "$wiki_dir/modules" -name "*.md" 2>/dev/null | wc -l | tr -d ' ')
+        fi
+
+        # Stale detection: pages without "## Last Updated" line
+        wiki_stale=0
+        while IFS= read -r page; do
+            [[ -z "$page" ]] && continue
+            if ! grep -q "^## Last Updated" "$page" 2>/dev/null; then
+                wiki_stale=$((wiki_stale + 1))
+            fi
+        done < <(find "$wiki_dir" -name "*.md" ! -name "log.md" 2>/dev/null)
+
+        # Empty detection: pages with <= 3 lines (excluding schema.md and log.md)
+        wiki_empty=0
+        while IFS= read -r page; do
+            [[ -z "$page" ]] && continue
+            local basename_page
+            basename_page=$(basename "$page")
+            if [[ "$basename_page" == "schema.md" || "$basename_page" == "log.md" ]]; then
+                continue
+            fi
+            local line_count
+            line_count=$(wc -l < "$page" | tr -d ' ')
+            if [[ "$line_count" -le 3 ]]; then
+                wiki_empty=$((wiki_empty + 1))
+            fi
+        done < <(find "$wiki_dir" -name "*.md" 2>/dev/null)
+
+        # Health score: 10 - empty_count - (stale > 2 ? 2 : 0), minimum 0
+        wiki_score=10
+        wiki_score=$((wiki_score - wiki_empty))
+        if [[ "$wiki_stale" -gt 2 ]]; then
+            wiki_score=$((wiki_score - 2))
+        fi
+        if [[ "$wiki_score" -lt 0 ]]; then
+            wiki_score=0
+        fi
+
+        echo "Wiki: $wiki_pages pages ($wiki_modules modules) | $wiki_stale stale | $wiki_empty empty | health: $wiki_score/10"
+    else
+        warn "Wiki: not initialized (run 'selfmodel init' or 'selfmodel adapt')"
     fi
 
     echo "═══════════════════════════════════════════════════"
@@ -984,6 +1039,22 @@ if [[ -f "${NEXT_SESSION}" ]]; then
     cat "${NEXT_SESSION}"
 else
     echo "（next-session.md 不存在，跳过）"
+fi
+
+echo ""
+echo "── Wiki Index ──"
+WIKI_INDEX="${PROJECT_ROOT}/.selfmodel/wiki/index.md"
+if [[ -f "${WIKI_INDEX}" ]]; then
+    cat "${WIKI_INDEX}"
+else
+    echo "(wiki not initialized)"
+fi
+
+echo ""
+echo "── Wiki Recent ──"
+WIKI_LOG="${PROJECT_ROOT}/.selfmodel/wiki/log.md"
+if [[ -f "${WIKI_LOG}" ]]; then
+    tail -10 "${WIKI_LOG}"
 fi
 
 echo ""
