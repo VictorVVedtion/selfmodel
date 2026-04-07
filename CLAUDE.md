@@ -248,6 +248,7 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 | Quality review + scoring | `.selfmodel/playbook/quality-gates.md` |
 | Sprint contract creation | `.selfmodel/playbook/sprint-template.md` |
 | Lessons learned + evolution | `.selfmodel/playbook/lessons-learned.md` |
+| Evolution pipeline + upstream PR | `.selfmodel/playbook/evolution-protocol.md` |
 | Independent evaluation + skeptical prompt | `.selfmodel/playbook/evaluator-prompt.md` |
 | Automated orchestration loop (large projects) | `.selfmodel/playbook/orchestration-loop.md` |
 | E2E 验证协议 v2 | `.selfmodel/playbook/e2e-protocol-v2.md` |
@@ -295,8 +296,9 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 
 ## Evolution
 
-**Trigger**: Every 10 Sprints completed
+**Trigger**: Every 10 Sprints completed (auto-detected at orchestration-loop Step 8.5)
 **Cycle**: `MEASURE → DIAGNOSE → PROPOSE → EXPERIMENT → EVALUATE → SELECT`
+**Pipeline**: `DETECT → STAGE → SUBMIT → TRACK` (for upstream contributions)
 
 1. **MEASURE** — Extract trends from quality.jsonl
 2. **DIAGNOSE** — Identify systemic bottlenecks
@@ -304,6 +306,10 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 4. **EXPERIMENT** — Test in next Sprint cycle
 5. **EVALUATE** — Validate with data
 6. **SELECT** — Effective → write to lessons-learned.md | Ineffective → discard with record
+
+**Upstream contribution**: Validated improvements (Result: improved) are candidates
+for upstream PRs. Run `selfmodel evolve --detect` or `/selfmodel:evolve` to scan.
+Human approval required before any PR submission. Full protocol: `playbook/evolution-protocol.md`.
 
 **Skill discovery**: New need → try existing skill → evaluate → keep or discard
 
@@ -314,6 +320,7 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 - Modifying `CLAUDE.md` (this file)
 - Modifying `.selfmodel/playbook/` rule files
 - Deleting `.selfmodel/state/` state files
+- Submitting evolution PRs to upstream (`selfmodel evolve --submit`)
 - Force push to main
 
 ### ABSOLUTELY FORBIDDEN
@@ -347,6 +354,7 @@ selfmodel/
     ├── state/dispatch-config.json     # Dispatch gate config (cap, convergence files)
     ├── state/quality.jsonl            # Quality score history
     ├── state/evolution.jsonl          # Evolution log
+    ├── state/evolution-staging/       # Staged evolution patches (pre-PR)
     ├── state/orchestration.log        # Orchestration loop event log
     ├── reviews/                       # Review records
     └── playbook/                      # On-demand loaded rules
