@@ -189,6 +189,15 @@ Evaluator         E2E Agent v2
 - **Self-evolution** — Every 10 sprints: MEASURE → DIAGNOSE → PROPOSE → EXPERIMENT → EVALUATE → SELECT. Hook interception logs feed into evolution analysis.
 - **Chaos testing (/rampage)** — "Be Water" philosophy. 4 surface engines (WEB, CLI, API, LIB) × 7 user personas (Impatient, Confused, Explorer, Multitasker, Edge Case, Abandoner, Speedrunner). Maps all user journeys, then walks each with chaotic behaviors. Advisory quality gate after E2E pass.
 
+## Evolution Pipeline
+
+Every 10 completed sprints, selfmodel can turn validated local process improvements into upstream contributions through the Evolution Pipeline. It scans local diffs and lessons learned for reusable changes, stages only generalizable patches, and records pipeline state in `.selfmodel/state/evolution.jsonl`. Run `/selfmodel:evolve` for the guided workflow; full protocol: [`.selfmodel/playbook/evolution-protocol.md`](.selfmodel/playbook/evolution-protocol.md).
+
+- **DETECT** — Compare local playbook, hook, script, and lessons-learned changes against the upstream baseline to create CANDIDATE entries.
+- **STAGE** — Interactively classify candidates, strip project-specific details, and generate patch files in `.selfmodel/state/evolution-staging/`.
+- **SUBMIT** — Package staged patches into an upstream PR after path audits and applicability checks. Human approval is required before any submission.
+- **TRACK** — Monitor open PRs and sync ACCEPTED, REJECTED, or CONFLICT states back into `evolution.jsonl`.
+
 ## Chaos Testing: /rampage
 
 `/rampage` is a standalone Claude Code skill that acts as the most chaotic, boundary-pushing user imaginable. It finds bugs that systematic QA never catches: race conditions, state corruption, navigation traps, input edge cases.

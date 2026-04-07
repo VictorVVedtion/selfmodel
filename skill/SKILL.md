@@ -24,6 +24,7 @@ specialized agents via Sprint contracts, worktree isolation, and independent qua
 | `/selfmodel:status` | View team, sprints, and quality trends |
 | `/selfmodel:plan` | Create/update multi-phase orchestration plan |
 | `/selfmodel:loop` | Auto-orchestration loop (plan-driven) |
+| `/selfmodel:evolve` | Evolution-to-PR pipeline for upstream improvements |
 
 ## Core Architecture
 
