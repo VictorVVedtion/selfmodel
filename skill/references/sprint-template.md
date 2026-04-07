@@ -78,6 +78,10 @@
 - Threshold: resilience >= 70
 （Leader 在 E2E PASS 后可选派发 `/rampage --selfmodel`，详见 quality-gates.md Step 4.7）
 
+## Wiki Impact（可选 — 本 Sprint 影响的 wiki 页面）
+- <wiki 页面路径，如 wiki/modules/auth.md>
+（Agent 在交付时更新这些页面。Leader 在 post-merge 时验证。）
+
 ## Cost (Leader 填写，Sprint 完成后)
 - Tokens: <estimated total, e.g. 125k input + 38k output>
 - Duration: <wall clock time, e.g. 4m 32s>

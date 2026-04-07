@@ -35,6 +35,22 @@ else
 fi
 
 echo ""
+echo "── Wiki Index ──"
+WIKI_INDEX="${PROJECT_ROOT}/.selfmodel/wiki/index.md"
+if [[ -f "${WIKI_INDEX}" ]]; then
+    cat "${WIKI_INDEX}"
+else
+    echo "(wiki not initialized)"
+fi
+
+echo ""
+echo "── Wiki Recent ──"
+WIKI_LOG="${PROJECT_ROOT}/.selfmodel/wiki/log.md"
+if [[ -f "${WIKI_LOG}" ]]; then
+    tail -10 "${WIKI_LOG}"
+fi
+
+echo ""
 echo "═══════════════════════════════════════════════════"
 
 exit 0

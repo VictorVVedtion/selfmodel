@@ -215,6 +215,14 @@ LOOP:
           - Write feedback: "Post-merge regression detected: <error>"
           - Agent must fix in worktree, re-rebase, re-merge
 
+  7.6. POST-MERGE WIKI SYNC (after smoke test passes)
+       a. Extract changed files: git diff HEAD~1 --name-only
+       b. Map to wiki/modules/ pages
+       c. Check Sprint contract ## Wiki Impact — listed pages not updated → log warning
+       d. Update wiki/index.md if new pages created
+       e. Informational only — does NOT block merge
+       f. Append to wiki/log.md: [timestamp] SYNC sprint-<N>: <summary>
+
   8. CHECKPOINT
      - Write next-session.md (current phase + completed sprints + pending)
      - Append to quality.jsonl
@@ -228,6 +236,10 @@ LOOP:
           ii.  Log: phase=<N> event=evolution_detect candidates=<N>
           iii. If candidates > 0: notify user "N evolution candidates. Run /selfmodel:evolve"
           iv.  Update team.json: evolution.last_review_sprint = current_sprint
+          v.   Wiki health audit: run `selfmodel status` wiki health check
+               - If health < 7: log warning "wiki health degraded: <score>/10"
+               - If stale > 5: log warning "N wiki pages stale — schedule wiki refresh"
+               - Append to orchestration.log: phase=<N> event=wiki_audit health=<score> stale=<N> empty=<N>
        d. If count < 10: skip
 
   9. CHECK context health
