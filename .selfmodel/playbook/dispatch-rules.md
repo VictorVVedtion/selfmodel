@@ -17,6 +17,7 @@
 | 技术选型 / 库对比 / 方案评估 | **Researcher → Leader** | 先搜再判，研究报告输入 Leader 决策 |
 | E2E / 运行验证 / 集成测试 / 端到端 | **E2E Agent** | 运行时验证，不做代码修改 |
 | 混沌测试 / chaos / rampage / 边界探索 / 压力测试 / 横冲直撞 | **Rampage (`/rampage`)** | 多 surface 混沌渗透，QA 通过后的混沌关卡 |
+| 深度阅读 / 大文件分析 / 模式提取 / 架构设计 / deep read | **Leader (Deep-Read)** | 不可并行化，需上下文连续性 |
 
 **路由冲突优先级**: Leader > Evaluator > Researcher > Opus Agent > Gemini > Codex
 **Evaluator 约束**: Evaluator 只做评审，不做实现。只有 Leader 可以 dispatch Evaluator。
@@ -186,6 +187,167 @@ Skill tool:
 **调用时机**: orchestration-loop.md Step 6.5（E2E PASS 且 Sprint 有用户交互面时）
 **Verdict 合并**: quality-gates.md Step 4.7
 
+---
+
+## Deep-Read Mode (Leader Research)
+
+### 定义
+
+某些工作**无法并行化**：读 30KB+ 源文件、理解 state machine、从 reference implementation 提取模式。这是研究工作，不是实现——不违反 Iron Rule 7 (No Implementation)。
+
+### 使用场景
+
+- 读大型源文件提取架构模式
+- 分析 state machine 或复杂控制流
+- 从参考实现设计架构
+- 为后续 complex Sprint 预提取 code tour
+
+### 流程
+
+1. Leader 留在 main（不需要 worktree）
+2. 用 Read tool 读源文件
+3. 产出提取文档: `.selfmodel/artifacts/<topic>.md`
+4. 提取文档成为后续 Sprint 的输入（在 ## Context 或 ## Code Tour 中引用）
+5. 不需要 Sprint contract（这是 Leader 编排工作）
+
+### Artifact 格式
+
+```markdown
+# Deep-Read: <Topic>
+
+## Source Files Read
+- <path> (lines N-M): <发现>
+
+## Extracted Patterns
+### Pattern: <name>
+<code snippet + explanation>
+
+## Architecture Map
+<组件连接方式>
+
+## Recommendations for Sprint <N>
+<给 agent sprint 的具体指导>
+
+## Created
+<timestamp>
+```
+
+### plan.md 集成
+
+Deep-read 工作在 plan.md 中以特殊类型出现：
+
+```markdown
+### Deep-Read DR1: <Title>
+- Agent: leader
+- Dependencies: none
+- Status: PENDING | DONE
+- Type: deep-read
+- Output: .selfmodel/artifacts/<topic>.md
+- Feeds: Sprint 5, Sprint 6
+```
+
+Leader 写完 artifact 后标记 Status → DONE。下游 Sprint 在 Dependencies 中列出 `DR1`。Deep-read artifact 路径写入下游 Sprint 的 ## Context。
+
+---
+
+## Two-Phase Dispatch (Complex Sprints)
+
+Complexity: complex 的 Sprint，分两阶段调度：
+
+### Phase A: Understand (只读)
+
+Agent 读代码库，产出 `understanding.md`。不写实现代码。
+
+**Gemini Phase A**:
+
+```bash
+cd <worktree-path> && \
+CI=true GIT_TERMINAL_PROMPT=0 timeout 120 gemini \
+  "@/Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/gemini/sprint-<N>.md Phase A ONLY: 读取所有 Code Tour 和 Context 文件。按合约 Understanding Checkpoint 写 understanding.md。不要写任何实现代码。" \
+  -s --yolo
+```
+
+**Codex Phase A**:
+
+```bash
+cd <worktree-path> && \
+CI=true GIT_TERMINAL_PROMPT=0 timeout 120 codex exec \
+  "Read /Users/vvedition/Desktop/selfmodel/.selfmodel/inbox/codex/sprint-<N>.md — Phase A ONLY: 读取所有 Code Tour 和 Context 文件。按 Understanding Checkpoint 写 understanding.md。不要实现任何代码。Working directory: $(pwd)" \
+  --full-auto
+```
+
+**Opus Agent Phase A**:
+
+```
+Agent tool:
+  prompt: |
+    你是 Opus Agent，Sprint <N> — PHASE A (Understand Only)。
+    合约: /Users/vvedition/Desktop/selfmodel/.selfmodel/contracts/active/sprint-<N>.md
+    读取合约，然后读取所有 Code Tour 和 Context 中引用的文件。
+    产出 understanding.md 在 worktree 根目录，内容：
+    1. Files Read (路径 + 行范围 + 学到什么)
+    2. Patterns Found (必须遵循的现有模式)
+    3. Integration Plan (新代码如何连接现有模块)
+    4. Failure Modes (可能出错的场景)
+    不要写实现代码。只写 understanding.md。
+  isolation: "worktree"
+  model: opus
+```
+
+### Phase A 验证 (Leader)
+
+Leader 读 worktree 中的 `understanding.md`，逐项检查：
+
+- [ ] 列出了具体文件和行号（非笼统的「我读了代码库」）
+- [ ] 识别了至少 2 个需要遵循的现有模式
+- [ ] Integration plan 引用了具体的函数/类型/导出
+- [ ] Failure modes 是针对本 Sprint 的，不是泛泛而谈
+
+**PASS** → Dispatch Phase B (实现)
+**FAIL** → 写反馈，Agent 在同一 worktree 重写 understanding.md
+
+### Phase B: Implement
+
+标准调度（per existing CLI templates），追加指令：
+「你的 understanding.md 已批准，按 integration plan 实现。」
+
+### 跳过条件
+
+- `Complexity: simple` — 直接实现，无理解阶段
+- `Complexity: standard` — 除非 Leader 判断风险高
+- Agent 是 Researcher / Evaluator — 只读角色，不需理解阶段
+
+---
+
+## Code Tour Extraction (Leader Pre-Dispatch)
+
+Complexity: standard 或 complex 的 Sprint，Leader **必须**在写 contract 前提取 code tour。
+
+### 提取流程
+
+1. 读 plan.md 中 Sprint 条目引用的参考文件
+2. 识别关键模式（函数签名、类型定义、命名约定、错误处理）
+3. 提取 2-5 个代表性片段（每个 5-20 行）
+4. 写入 contract 的 `## Code Tour` section（含文件路径、行范围、「为什么重要」）
+5. 识别架构上下文（数据流、邻接模块、命名约定、错误模式）
+6. 写入 contract 的 `## Architecture Context` section
+
+### 规则
+
+- 片段**必须是真实代码** — 从代码库复制，不是编造
+- **包含行号** — Agent 可以核实
+- **最多 5 个片段** — 够展示模式即可
+- **聚焦接口** — 函数签名、类型导出、配置结构
+- 如果存在常见反模式，包含一个「错误示范」
+
+### 跳过条件
+
+- `Complexity: simple` — 无需 code tour
+- Agent 是 Researcher — 产出报告，不写代码
+- 纯文档 Sprint — 无代码模式
+
+---
+
 ### 并行调度（受限滚动批次）
 
 并行调度受以下硬约束限制（由 `enforce-dispatch-gate.sh` hook 强制执行）：
@@ -287,7 +449,11 @@ git merge sprint/<N>-<agent> --no-ff -m "Sprint <N>: <title>"
 ### 识别时机
 
 Leader 在以下时刻识别和更新收敛文件列表：
-1. **创建 plan.md 时**: 扫描所有 Sprint 的 Files 列表，出现在 2+ Sprint 中的文件 → 标记
+1. **创建 plan.md 时**: 自动扫描所有 Sprint 的 Files 列表:
+   - 出现在 3+ Sprint 中 → 自动标记为收敛文件候选
+   - 匹配注册文件模式 (index.ts, types.ts, routes.ts, __init__.py, mod.rs) → 自动标记
+   - Leader 确认候选列表后写入 dispatch-config.json
+   - 详见 orchestration-loop.md Step 1.5
 2. **Phase 边界**: 审查本 Phase 是否有新的共享文件
 3. **merge 冲突后**: 冲突涉及的文件自动加入候选列表
 4. **`verify-delivery.sh` 报告未声明修改时**: 频繁出现的未声明文件 → 候选

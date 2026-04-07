@@ -20,6 +20,7 @@ Only code, CLI commands, and file content may be in English.
 ### Leader Rules
 
 7. **No Implementation** — Leader ONLY orchestrates, reviews, and arbitrates. NEVER writes implementation code directly. Delegate to Agents via Sprint contracts.
+   **Clarification**: "No Implementation" means no production code. Leader MAY perform deep reads (source analysis, pattern extraction, design docs → `.selfmodel/artifacts/`) — this is research/orchestration, not implementation.
 8. **No Self-Review** — Implementer ≠ Evaluator. Independent Evaluator reviews all output (skeptical prompt, isolated context). Leader arbitrates only on Evaluator disputes.
 9. **File Buffer Only** — Complex prompts MUST be written to `.selfmodel/inbox/<agent>/` files. CLI only references file paths. NEVER pass raw prompts via CLI arguments.
 10. **No Interactive** — All commands: `CI=true GIT_TERMINAL_PROMPT=0 timeout <N> <cmd>`. Zero interactive prompts allowed. Do NOT use `yes |` (causes E2BIG).
@@ -31,6 +32,7 @@ Only code, CLI commands, and file content may be in English.
 16. **No Orphan Work** — Every Sprint that reaches DELIVERED must be reviewed and merged (or rejected) before starting new Sprints. Never leave DELIVERED branches unmerged while forking new ones.
 17. **Rolling Batch** — Max parallel Sprints defaults to 3 (configurable in `dispatch-config.json`). ACTIVE + DELIVERED count MUST NOT exceed the cap. Never fan-out all pending sprints at once. Rhythm: dispatch 3 → merge 3 → dispatch 3. **Enforced by `enforce-dispatch-gate.sh` hook** — dispatch blocked at tool level if exceeded.
 18. **Convergence File Gate** — Files listed in `dispatch-config.json` → `convergence_files[]` force serialization. Two Sprints touching the same convergence file MUST NOT be ACTIVE simultaneously. This is a hard gate enforced by hook, not advisory.
+19. **Depth Gate** — Standard/complex Sprints MUST have real Code Tour (not template placeholders) and Architecture Context in the contract before dispatch. Complex Sprints MUST complete Phase A (understanding.md) before Phase B (implementation). Deep-Read dependencies MUST be DONE before dependent Sprints dispatch. **Enforced by `enforce-depth-gate.sh` hook** — dispatch blocked at tool level if contract lacks depth content.
 
 ### Leader Decision Principles
 
@@ -175,11 +177,14 @@ git worktree list  # must show only main worktree
 1. Write contract → .selfmodel/contracts/active/sprint-<N>.md
    Write task    → .selfmodel/inbox/<agent>/sprint-<N>.md
 
-2. Dispatch Gate (enforced by enforce-dispatch-gate.sh hook)
+2. Dispatch Gate (enforced by enforce-dispatch-gate.sh + enforce-depth-gate.sh hooks)
    a. Verify ACTIVE + DELIVERED count < max_parallel (default 3)
    b. Compare contract ## Files lists — overlap → merge Sprint or serialize
    c. Check Files against dispatch-config.json convergence_files — shared → serialize
-   d. Hook blocks dispatch at tool level if any gate fails
+   d. Check contract has real Code Tour + Architecture Context (standard/complex)
+   e. Check Deep-Read dependencies are DONE (if any)
+   f. Check understanding.md exists for complex Sprint Phase B
+   g. Hook blocks dispatch at tool level if any gate fails
 
 3. Create worktree (from latest main HEAD)
    /git-worktree add sprint-<N>-<agent> -b sprint/<N>-<agent>
@@ -218,18 +223,21 @@ git worktree list  # must show only main worktree
 
 Contracts stored in `.selfmodel/contracts/active/`, moved to `archive/` on completion.
 **Lifecycle**: `DRAFT → ACTIVE → DELIVERED → REVIEWED → MERGED | REJECTED`
+Sprint contracts include Complexity level (`simple | standard | complex`).
+Complex sprints require Understanding Checkpoint (two-phase dispatch).
 Contract template → read `.selfmodel/playbook/sprint-template.md`
 
 ## Quality Review
 
-5-dimension scoring (details in `playbook/quality-gates.md`):
+6-dimension scoring (details in `playbook/quality-gates.md`):
 
 | Dimension | Weight | Auto-Reject Threshold |
 |-----------|--------|-----------------------|
-| Functionality | 30% | Missing acceptance criteria |
-| Code Quality | 25% | Contains TODO/mock/swallowed exceptions |
-| Design Taste | 20% | Generic naming |
+| Functionality | 25% | Missing acceptance criteria |
+| Code Quality | 20% | Contains TODO/mock/swallowed exceptions |
+| Design Taste | 15% | Generic naming |
 | Completeness | 15% | Missing else/catch branches |
+| Integration Depth | 15% | Re-implements existing code, breaks conventions |
 | Originality | 10% | Brute force when elegant solution exists |
 
 **Verdict**: ≥7.0 Accept → merge | 5.0-6.9 Revise → feedback | <5.0 Reject → redo
@@ -255,6 +263,7 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 | 混沌渗透测试（Rampage） | `/rampage` skill (`~/.claude/skills/rampage/SKILL.md`) |
 | Context checkpoint + reset protocol | `.selfmodel/playbook/context-protocol.md` |
 | Wiki protocol + page format | `.selfmodel/playbook/wiki-protocol.md` |
+| Deep-read artifacts + code tours | `.selfmodel/artifacts/` |
 
 ## Context Management
 
@@ -349,7 +358,7 @@ selfmodel/
     ├── inbox/research/                # Leader→Researcher queries+reports
     ├── inbox/evaluator/               # Leader→Evaluator eval files
     ├── inbox/e2e/                     # Leader→E2E Agent v2 验证任务
-    ├── artifacts/                     # 验证产物（E2E 截图/日志 + Rampage 韧性报告）
+    ├── artifacts/                     # Deep-read extractions + E2E 截图/日志 + Rampage 韧性报告
     ├── wiki/                          # Project knowledge base (auto-managed)
     │   ├── index.md                   # Content catalog
     │   ├── log.md                     # Update log (append-only)

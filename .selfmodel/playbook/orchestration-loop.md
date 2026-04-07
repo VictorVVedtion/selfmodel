@@ -31,6 +31,7 @@ Path: `.selfmodel/state/plan.md`
 - Dependencies: none
 - Status: PENDING | ACTIVE | DELIVERED | MERGED | REJECTED | BLOCKED
 - Priority: P0 | P1 | P2
+- Complexity: simple | standard | complex
 - Timeout: 60 | 120 | 180 | 300
 - Files: src/components/Button.tsx, src/components/Button.test.tsx
 
@@ -39,8 +40,17 @@ Path: `.selfmodel/state/plan.md`
 - Dependencies: Sprint 1
 - Status: PENDING
 - Priority: P0
+- Complexity: complex
 - Timeout: 180
 - Files: src/tools.ts, src/exchange/index.ts
+
+### Deep-Read DR1: <Title> (Leader research, not a Sprint)
+- Agent: leader
+- Dependencies: none
+- Status: PENDING | DONE
+- Type: deep-read
+- Output: .selfmodel/artifacts/<topic>.md
+- Feeds: Sprint 3, Sprint 4
 
 ## Phase 1: <Phase Name>
 
@@ -98,6 +108,21 @@ LOOP:
      - Parse current phase, all sprint statuses
      - Identify: executable (PENDING + all deps MERGED), blocked, active
 
+  1.5. CONVERGENCE PRE-DETECTION (首次迭代或 plan.md 变更时)
+       a. 解析 plan.md 所有 Sprint 条目 → 提取 Files 列表
+       b. 构建文件频率表: {file_path → [sprint_numbers]}
+       c. 出现在 3+ Sprint 中的文件 → 自动加入 convergence_files 候选
+       d. 匹配注册文件模式的文件 (index.ts, types.ts, routes.ts,
+          __init__.py, mod.rs, barrel exports) → 自动加入候选
+       e. 展示候选列表给 Leader 确认:
+          "Detected N convergence file candidates:
+           - src/tools.ts (touched by Sprint 3, 5, 8, 12)
+           - src/index.ts (registration file pattern)
+           Confirm? [Y/n]"
+       f. 确认后写入 dispatch-config.json convergence_files[]
+       g. 更新 plan.md ## Convergence Files section
+       h. Log: event=convergence_predetect files=<N> confirmed=<N>
+
   2. FIND executable sprints
      - Filter: Status == PENDING AND all Dependencies have Status == MERGED
      - Sort: Priority (P0 first) → Sprint number (lower first)
@@ -142,6 +167,13 @@ LOOP:
      d. Create worktree (or use Agent tool isolation)
      e. Update plan.md: Status → ACTIVE
      f. Dispatch agent per dispatch-rules.md
+     g. IF contract Complexity == "complex":
+        - Dispatch Phase A only (understanding phase, timeout 120s)
+        - Wait for Agent to produce understanding.md
+        - Leader validates understanding.md (checklist in dispatch-rules.md)
+        - PASS → Dispatch Phase B (implementation) in same worktree
+        - FAIL → Write feedback, Agent rewrites understanding.md
+        - Phase A timeout does NOT count against Sprint timeout
 
   5. WAIT for all dispatched agents
 
@@ -214,6 +246,13 @@ LOOP:
           - Sprint status → REVISE (not MERGED)
           - Write feedback: "Post-merge regression detected: <error>"
           - Agent must fix in worktree, re-rebase, re-merge
+       e. Sprint-specific smoke test (if declared in contract):
+          - Read contract ## Smoke Test section
+          - Execute each command with 30s timeout
+          - If any command fails or output mismatches expected:
+            same handling as build/test failure (revert + REVISE)
+          - If no ## Smoke Test section: skip (no block)
+          - Log: event=smoke_test sprint=<N> result=pass|fail|skipped
 
   7.6. POST-MERGE WIKI SYNC (after smoke test passes)
        a. Extract changed files: git diff HEAD~1 --name-only

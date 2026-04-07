@@ -4,29 +4,30 @@
 
 ---
 
-## 5 维度评分体系
+## 6 维度评分体系
 
 | 维度 | 权重 | 说明 |
 |---|---|---|
-| Functionality | 30% | 合约验收标准是否全部满足 |
-| Code Quality | 25% | Iron Rules 合规性 |
-| Design Taste | 20% | 命名、架构、抽象层次的品味 |
+| Functionality | 25% | 合约验收标准是否全部满足 |
+| Code Quality | 20% | Iron Rules 合规性 |
+| Design Taste | 15% | 命名、架构、抽象层次的品味 |
 | Completeness | 15% | 错误处理、边界条件、分支覆盖 |
+| Integration Depth | 15% | 与现有代码库的模式一致性 |
 | Originality | 10% | 方案的优雅程度，非显而易见的解法 |
 
-### Functionality（30%）
+### Functionality（25%）
 
 - **10/10**: 验收标准逐条通过，边界输入（空值/极端值/并发）处理完整，无 regression
 - **7/10**: 核心功能通过，1-2 个边界场景未覆盖但不影响正常使用
 - **<5 自动拒绝**: 验收标准有未通过项，或核心路径崩溃
 
-### Code Quality（25%）
+### Code Quality（20%）
 
 - **10/10**: Iron Rules 全满足，零 anti-pattern，代码风格与项目一致
 - **7/10**: 铁律满足，有 1-2 处风格不一致但不影响可读性
 - **<5 自动拒绝**: 含 TODO/FIXME，含 mock 数据，含异常吞没，编译失败
 
-### Design Taste（20%）
+### Design Taste（15%）
 
 - **10/10**: 命名读起来像散文，函数职责单一，抽象层次清晰，架构值得截图
 - **7/10**: 命名准确但不优雅，结构合理但有 1 处可以更好的抽象
@@ -37,6 +38,12 @@
 - **10/10**: 所有 I/O 有错误处理，所有 if 有 else（或 guard clause），类型完整
 - **7/10**: 主路径错误处理完整，1-2 个次要路径缺少 catch
 - **<5 自动拒绝**: 主路径缺少错误处理，文件/网络操作无 try-catch
+
+### Integration Depth（15%）
+
+- **10/10**: 完美匹配现有模式：命名遵循项目约定，错误处理与系统一致，复用已有工具函数，understanding.md 展示深度阅读（具体文件+行号+模式识别）
+- **7/10**: 主要模式匹配，1-2 处命名或错误处理风格不一致但不影响维护。understanding.md 存在且有实质内容
+- **<5 自动拒绝**: 重新实现已有代码（re-implements existing utility），打破命名约定（camelCase 项目中用 snake_case），错误处理模式与系统不一致（系统用 structured logger 但 Agent 用 console.error），understanding.md 缺失或敷衍（无具体文件引用）
 
 ### Originality（10%）
 
@@ -60,6 +67,8 @@
 8. Dead code（被注释掉的代码块）或 unused import
 9. 硬编码 secrets / API keys / credentials
 10. 强类型语言缺少类型注解（TypeScript 的 `any` 视为缺失）
+11. 重新实现代码库中已有的功能（duplicate code）
+12. 命名约定不一致（如在 camelCase 项目中用 snake_case，或反之）
 
 ---
 
@@ -170,7 +179,7 @@ Evaluator 返回 JSON verdict（schema 见 evaluator-prompt.md）。
 
 ### Step 5: 判定（Leader 机械执行）
 
-加权平均: `weighted = func×0.30 + quality×0.25 + taste×0.20 + complete×0.15 + original×0.10`
+加权平均: `weighted = func×0.25 + quality×0.20 + taste×0.15 + complete×0.15 + integration×0.15 + original×0.10`
 
 | 加权平均 | 判定 | 后续 |
 |---|---|---|
@@ -201,6 +210,7 @@ REVISE 或 REJECT 时写入 `.selfmodel/reviews/sprint-<N>-review.md`：
 | Code Quality | /10 | <说明> |
 | Design Taste | /10 | <说明> |
 | Completeness | /10 | <说明> |
+| Integration Depth | /10 | <说明> |
 | Originality | /10 | <说明> |
 | **Weighted** | **/10** | |
 ### Must Fix（阻塞合并）
@@ -229,9 +239,10 @@ REVISE 或 REJECT 时写入 `.selfmodel/reviews/sprint-<N>-review.md`：
 | Code Quality | 9/10 | shellcheck 零警告，错误处理完整（每个 jq 调用都有 fallback），变量命名语义清晰 |
 | Design Taste | 9/10 | 拦截消息不仅报错还引导正确行为，BYPASS 用环境变量而非配置文件，优雅且安全 |
 | Completeness | 8/10 | 主路径和主要边界全覆盖，唯一扣分：settings.json 合并在极端嵌套 JSON 下可能需更健壮的深度合并 |
+| Integration Depth | 9/10 | 完美匹配 selfmodel.sh 现有模式，复用 err/info/warn helpers，settings.json 处理方式与 Claude Code 约定一致 |
 | Originality | 9/10 | 白名单用 glob 模式匹配而非硬编码路径列表，settings.json 合并策略简洁可靠 |
 
-**加权**: 9x0.30 + 9x0.25 + 9x0.20 + 8x0.15 + 9x0.10 = **8.9**
+**加权**: 9×0.25 + 9×0.20 + 9×0.15 + 8×0.15 + 9×0.15 + 9×0.10 = **8.85 ≈ 8.9**
 
 **为什么是高分**: 产出是完整可用的工程代码，不是骨架或 demo。每个 hook 都处理了真实运行环境的边界情况。
 
@@ -250,9 +261,10 @@ REVISE 或 REJECT 时写入 `.selfmodel/reviews/sprint-<N>-review.md`：
 | Code Quality | 7/10 | shellcheck 通过，错误处理基本完整，但 settings.json 操作缺少备份机制 |
 | Design Taste | 6/10 | 拦截消息生硬（"blocked"），用户无法理解为什么被拦截和如何修正 |
 | Completeness | 7/10 | 主路径覆盖，但 codex 关键词遗漏属于需求理解不完整 |
+| Integration Depth | 7/10 | 基本匹配现有模式，settings.json merge 风格略有不同但不破坏系统 |
 | Originality | 8/10 | 白名单设计思路合理，但实现未充分利用 |
 
-**加权**: 7x0.30 + 7x0.25 + 6x0.20 + 7x0.15 + 8x0.10 = **7.0**
+**加权**: 7×0.25 + 7×0.20 + 6×0.15 + 7×0.15 + 7×0.15 + 8×0.10 = **6.95 ≈ 7.0**
 
 **扣分关键**: 验收标准部分遗漏（Functionality 扣分主因），拦截消息缺乏引导性（Design Taste 扣分主因）。
 
@@ -273,9 +285,10 @@ REVISE 或 REJECT 时写入 `.selfmodel/reviews/sprint-<N>-review.md`：
 | Code Quality | 3/10 | 含 TODO、placeholder，变量名泛型化，文件操作无错误处理 — 触发自动拒绝规则 |
 | Design Taste | 4/10 | 泛型命名，与项目现有风格断裂，无日志输出 |
 | Completeness | 5/10 | 函数骨架存在但关键分支全缺失 |
+| Integration Depth | 3/10 | 风格与现有代码断裂，泛型命名，不复用已有 err/info/warn helpers，无 understanding.md |
 | Originality | 6/10 | 整体思路合理但执行完全没跟上 |
 
-**加权**: 4x0.30 + 3x0.25 + 4x0.20 + 5x0.15 + 6x0.10 = **4.1**（触发自动拒绝规则直接 Grade F）
+**加权**: 4×0.25 + 3×0.20 + 4×0.15 + 5×0.15 + 3×0.15 + 6×0.10 = **3.8**（触发自动拒绝规则直接 Grade F）
 
 **为什么直接拒绝**: 含 TODO 和 placeholder 触发自动拒绝规则（#1、#2）。
 
@@ -324,7 +337,7 @@ REVISE 或 REJECT 时写入 `.selfmodel/reviews/sprint-<N>-review.md`：
 
 每次审查追加到 `.selfmodel/state/quality.jsonl`：
 ```json
-{"sprint":1,"agent":"gemini","evaluator":"opus-agent","scores":{"func":8,"quality":7,"taste":6,"complete":9,"original":7},"weighted":7.4,"verdict":"accept","leader_override":null,"e2e_agent":"opus-agent","e2e_verdict":"PASS","e2e_atoms":{"total":9,"passed":7,"failed":0,"flaky":1,"blocked":1,"explicit_pass":"4/5","implicit_pass":"4/4"},"e2e_change_profile":"backend_only","e2e_depth":"standard","e2e_regressions":0,"rampage_dispatched":false,"rampage_verdict":null,"rampage_resilience":null,"rampage_surfaces":[],"final_verdict":"accept","ts":"2026-03-28T12:00:00Z"}
+{"sprint":1,"agent":"gemini","evaluator":"opus-agent","scores":{"func":8,"quality":7,"taste":6,"complete":9,"integration":7,"original":7},"weighted":7.3,"verdict":"accept","leader_override":null,"e2e_agent":"opus-agent","e2e_verdict":"PASS","e2e_atoms":{"total":9,"passed":7,"failed":0,"flaky":1,"blocked":1,"explicit_pass":"4/5","implicit_pass":"4/4"},"e2e_change_profile":"backend_only","e2e_depth":"standard","e2e_regressions":0,"rampage_dispatched":false,"rampage_verdict":null,"rampage_resilience":null,"rampage_surfaces":[],"smoke_test":"skipped","final_verdict":"accept","ts":"2026-03-28T12:00:00Z"}
 ```
 
 ---
@@ -344,6 +357,7 @@ REVISE 或 REJECT 时写入 `.selfmodel/reviews/sprint-<N>-review.md`：
 | Build 完整性 | `npm run build` / `cargo build` | 任何编译错误 |
 | 测试回归 | `npm test -- --bail` / `cargo test` | 任何测试失败 |
 | 变更范围 | `git diff HEAD~1 --stat` | 变更文件数远超 Sprint deliverables |
+| **Smoke Test** | **合约 ## Smoke Test 中声明的命令** | **命令返回非零或输出不匹配预期** |
 
 ### 失败处理
 
@@ -351,6 +365,14 @@ REVISE 或 REJECT 时写入 `.selfmodel/reviews/sprint-<N>-review.md`：
 2. Sprint 状态从 MERGED 回退到 REVISE
 3. 写入 feedback：`Post-merge regression: <具体错误>`
 4. Agent 在 worktree 中修复，重新 rebase，重新 merge
+
+### Smoke Test 执行规则
+
+1. 检查合约是否有 `## Smoke Test` section
+2. 有 → 按序执行每条命令，每条超时 30s
+3. 命令失败或输出不匹配 → 同 build/test 失败处理（revert + REVISE）
+4. 没有 `## Smoke Test` section → 跳过（不阻塞）
+5. 结果追加到 quality.jsonl: `"smoke_test": "pass" | "fail" | "skipped"`
 
 ### 为什么需要这个 Gate
 

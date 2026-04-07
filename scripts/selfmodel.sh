@@ -1880,6 +1880,30 @@ HOOKEOF
     chmod +x "$hooks_dir/enforce-agent-rules.sh"
     ok "Hook generated: enforce-agent-rules.sh"
 
+    # 4. enforce-dispatch-gate.sh (stub — full version via selfmodel update --remote)
+    if [[ ! -f "$hooks_dir/enforce-dispatch-gate.sh" ]]; then
+        cat > "$hooks_dir/enforce-dispatch-gate.sh" << 'HOOKEOF'
+#!/usr/bin/env bash
+# enforce-dispatch-gate.sh — stub (run selfmodel update --remote for full version)
+# Gates: parallel cap, convergence files, file overlap
+exit 0
+HOOKEOF
+        chmod +x "$hooks_dir/enforce-dispatch-gate.sh"
+        ok "Hook stub generated: enforce-dispatch-gate.sh (run 'selfmodel update --remote' for full version)"
+    fi
+
+    # 5. enforce-depth-gate.sh (stub — full version via selfmodel update --remote)
+    if [[ ! -f "$hooks_dir/enforce-depth-gate.sh" ]]; then
+        cat > "$hooks_dir/enforce-depth-gate.sh" << 'HOOKEOF'
+#!/usr/bin/env bash
+# enforce-depth-gate.sh — stub (run selfmodel update --remote for full version)
+# Gates: contract quality, deep-read deps, understanding phase
+exit 0
+HOOKEOF
+        chmod +x "$hooks_dir/enforce-depth-gate.sh"
+        ok "Hook stub generated: enforce-depth-gate.sh (run 'selfmodel update --remote' for full version)"
+    fi
+
     # ── B. Merge settings.json ───────────────────────────────────────────────
 
     local hooks_config
@@ -1908,6 +1932,14 @@ HOOKEOF
           {
             "type": "command",
             "command": "bash scripts/hooks/enforce-agent-rules.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash scripts/hooks/enforce-dispatch-gate.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash scripts/hooks/enforce-depth-gate.sh"
           }
         ]
       }

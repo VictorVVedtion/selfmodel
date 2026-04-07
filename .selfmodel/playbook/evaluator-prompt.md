@@ -64,6 +64,7 @@ Review protocol:
 1. Check the 10 auto-reject triggers FIRST. If ANY trigger fires, stop and output Grade F immediately.
 2. Compare the diff against EVERY acceptance criterion. An unchecked criterion = 0 for Functionality.
 3. **Focus Area**: Review ONLY the files listed in Deliverables. Peripheral changes (config, imports) get a quick glance but should not drive scoring. If the diff includes files unrelated to the Sprint objective, note them but don't penalize.
+3.5. **Integration Consistency** (only when Section 2.5 is provided): Check whether the diff follows the naming conventions, error handling patterns, and architectural style described in Integration Context. Inconsistencies reduce the Integration Depth score.
 4. Output your Rationale BEFORE scores. Explain what you looked for and what you found.
 5. Calibrate against the anchors below: high = 8.9, low = 4.1. Justify relative to these.
 6. When in doubt, score LOWER. Score inflation is worse than being too harsh.
@@ -78,6 +79,22 @@ Review protocol:
 
 <output of: git diff main...sprint/N-agent>
 
+## Section 2.5: Integration Context (可选 — complex sprints 提供)
+
+Sprint 涉及多文件集成或触碰现有子系统时提供。用此上下文评估实现是否匹配代码库，而不仅是孤立地判断代码质量。
+
+### 架构概览
+<3-4 句话: 代码所在系统、角色、数据流>
+
+### 命名约定
+<具体约定: 如 "函数: camelCase. 文件: kebab-case. 类型: PascalCase.">
+
+### 错误处理模式
+<具体模式: 如 "所有 I/O try/catch, 错误用 structured logger, 不吞异常, 不无上下文 re-throw.">
+
+### 邻接模块 (不得破坏)
+<import 本模块的模块列表，简要说明>
+
 ## Section 3: Calibration Anchors
 
 ### High Anchor (8.9/10) — Sprint 2: Hooks Enforcement
@@ -87,6 +104,7 @@ Review protocol:
 | Code Quality | 9 | shellcheck zero warnings, every jq call has fallback |
 | Design Taste | 9 | Error messages guide correct behavior, BYPASS via env var |
 | Completeness | 8 | Main paths covered, only gap: deep JSON merge edge case |
+| Integration Depth | 9 | Perfectly matches selfmodel.sh patterns, reuses err/info/warn helpers |
 | Originality | 9 | Glob pattern matching vs hardcoded paths |
 Weighted: 8.9
 
@@ -97,8 +115,9 @@ Weighted: 8.9
 | Code Quality | 3 | Contains TODO, placeholder, generic names — auto-reject |
 | Design Taste | 4 | Generic naming, style break with project |
 | Completeness | 5 | Skeleton exists but critical branches missing |
+| Integration Depth | 3 | Style break with existing code, generic naming, no helper reuse |
 | Originality | 6 | Reasonable approach, zero execution |
-Weighted: 4.1 (auto-reject on rules #1, #2)
+Weighted: 3.8 (auto-reject on rules #1, #2)
 
 ## Section 4: Auto-Reject Triggers (check FIRST)
 
@@ -135,6 +154,7 @@ Key directives embedded in every eval input:
 3. "Rationale BEFORE scores" — forces reasoning before number anchoring
 4. "Calibrate against anchors" — prevents drift from known references
 5. "When in doubt, score LOWER" — asymmetric error: false positive > false negative
+6. "Integration Context" — when provided, evaluates fit with existing system, not just standalone quality
 
 ---
 
@@ -151,6 +171,7 @@ Key directives embedded in every eval input:
     "code_quality": "<Iron Rules compliance analysis>",
     "design_taste": "<naming and architecture taste evaluation>",
     "completeness": "<error handling and branch coverage analysis>",
+    "integration_depth": "<codebase pattern matching, convention compliance, understanding.md quality>",
     "originality": "<solution elegance evaluation>"
   },
   "scores": {
@@ -158,6 +179,7 @@ Key directives embedded in every eval input:
     "code_quality": 0,
     "design_taste": 0,
     "completeness": 0,
+    "integration_depth": 0,
     "originality": 0
   },
   "weighted": 0.0,
@@ -175,7 +197,7 @@ Key directives embedded in every eval input:
 }
 ```
 
-Weighted formula: `func * 0.30 + quality * 0.25 + taste * 0.20 + complete * 0.15 + original * 0.10`
+Weighted formula: `func * 0.25 + quality * 0.20 + taste * 0.15 + complete * 0.15 + integration * 0.15 + original * 0.10`
 
 Verdict thresholds:
 - `weighted >= 7.0` AND `auto_reject_triggered == false` → `ACCEPT`
