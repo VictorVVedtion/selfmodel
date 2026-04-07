@@ -3140,7 +3140,7 @@ cmd_evolve() {
     local selfmodel_dir="$dir/.selfmodel"
     if [[ ! -d "$selfmodel_dir" ]]; then
         err "No .selfmodel/ directory found. Run 'selfmodel init' first."
-        exit 1
+        return 1
     fi
 
     case "$action" in
