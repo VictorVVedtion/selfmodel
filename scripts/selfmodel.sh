@@ -496,6 +496,15 @@ cmd_adapt() {
     # Generate hooks and merge settings.json
     generate_hooks "$dir"
 
+    # Handle wiki — full generate if missing, reconcile if exists
+    if [[ ! -d "$dir/.selfmodel/wiki" ]]; then
+        info "No wiki/ found. Generating full wiki scaffolding..."
+        generate_wiki "$dir"
+    else
+        info "Wiki exists. Reconciling modules..."
+        reconcile_wiki "$dir"
+    fi
+
     # Handle CLAUDE.md — inject rather than overwrite
     if [[ -f "$dir/CLAUDE.md" ]]; then
         if grep -q '<!-- selfmodel:start -->' "$dir/CLAUDE.md" 2>/dev/null; then
