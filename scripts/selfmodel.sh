@@ -1570,6 +1570,852 @@ generate_team_table() {
     esac
 }
 
+# ─── CMD: evolve ──────────────────────────────────────────────────────────────
+
+# Establish upstream baseline reference for diffing.
+# Priority: git remote "upstream" → upstream-baseline.sha file → no baseline.
+# Outputs the baseline ref to stdout; returns 1 if no baseline found.
+evolve_establish_baseline() {
+    local dir="$1"
+
+    # Option A: upstream remote exists
+    if git -C "$dir" remote get-url upstream &>/dev/null; then
+        if git -C "$dir" fetch upstream --quiet 2>/dev/null; then
+            echo "upstream/main"
+            return 0
+        fi
+        # Fetch failed but remote exists — try anyway
+        if git -C "$dir" rev-parse upstream/main &>/dev/null; then
+            echo "upstream/main"
+            return 0
+        fi
+    fi
+
+    # Option B: stored baseline SHA
+    local sha_file="$dir/.selfmodel/state/upstream-baseline.sha"
+    if [[ -f "$sha_file" ]]; then
+        local sha
+        sha=$(tr -d '[:space:]' < "$sha_file")
+        if [[ -n "$sha" ]] && git -C "$dir" rev-parse "$sha" &>/dev/null; then
+            echo "$sha"
+            return 0
+        fi
+    fi
+
+    # No baseline available
+    return 1
+}
+
+# Scan diffs between baseline and HEAD for playbook/hooks/scripts.
+# Outputs one line per changed file: <relative_path>\t<+lines>\t<-lines>
+evolve_scan_diffs() {
+    local dir="$1"
+    local baseline="$2"
+    local paths=(".selfmodel/playbook/" ".selfmodel/hooks/" "scripts/")
+
+    for scan_path in "${paths[@]}"; do
+        local diff_output
+        diff_output=$(git -C "$dir" diff --numstat "${baseline}..HEAD" -- "$scan_path" 2>/dev/null) || continue
+        if [[ -n "$diff_output" ]]; then
+            echo "$diff_output"
+        fi
+    done
+}
+
+# Scan lessons-learned.md for entries with "Result: improved" that lack a
+# corresponding diff. Outputs one line per lesson: <sprint_ref>\t<summary>
+evolve_scan_lessons() {
+    local dir="$1"
+    local lessons_file="$dir/.selfmodel/playbook/lessons-learned.md"
+
+    if [[ ! -f "$lessons_file" ]]; then
+        return 0
+    fi
+
+    # Extract lesson blocks that have "Result: improved" or "Result: 改善"
+    local in_block=false
+    local block_sprint=""
+    local block_lesson=""
+    local block_result_improved=false
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^###\ Sprint ]]; then
+            # Emit previous block if it was improved
+            if $block_result_improved && [[ -n "$block_sprint" ]]; then
+                printf '%s\t%s\n' "$block_sprint" "$block_lesson"
+            fi
+            block_sprint="${line#\#\#\# }"
+            block_lesson=""
+            block_result_improved=false
+            in_block=true
+        elif $in_block; then
+            if [[ "$line" =~ ^-\ \*\*Lesson\*\*:\ (.+) ]]; then
+                block_lesson="${BASH_REMATCH[1]}"
+            elif [[ "$line" =~ Result:.*improv ]] || [[ "$line" =~ Result:.*改善 ]]; then
+                block_result_improved=true
+            fi
+        fi
+    done < "$lessons_file"
+    # Emit last block
+    if $block_result_improved && [[ -n "$block_sprint" ]]; then
+        printf '%s\t%s\n' "$block_sprint" "$block_lesson"
+    fi
+}
+
+# Scan hook-intercepts.log for patterns with 3+ occurrences of same hook+reason.
+# Outputs one line per pattern: <hook>\t<reason>\t<count>
+evolve_scan_intercepts() {
+    local dir="$1"
+    local log_file="$dir/.selfmodel/state/hook-intercepts.log"
+
+    if [[ ! -f "$log_file" ]] || [[ ! -s "$log_file" ]]; then
+        return 0
+    fi
+
+    # Extract hook+reason pairs and count occurrences
+    sed -n 's/.*hook=\([^ ]*\).*reason=\([^ ]*\).*/\1\t\2/p' "$log_file" \
+        | sort | uniq -c | sort -rn \
+        | while IFS= read -r line; do
+            local count hook reason
+            count=$(printf '%s' "$line" | awk '{print $1}')
+            hook=$(printf '%s' "$line" | awk '{print $2}')
+            reason=$(printf '%s' "$line" | awk '{print $3}')
+            if [[ "$count" -ge 3 ]] && [[ -n "$hook" ]]; then
+                printf '%s\t%s\t%s\n' "$hook" "$reason" "$count"
+            fi
+        done
+}
+
+# Run PATH_DETECTION heuristic on a diff string.
+# Outputs: <score>\t<reason>
+evolve_heuristic_path_detection() {
+    local dir="$1"
+    local diff_content="$2"
+
+    local toplevel
+    toplevel=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || echo "$dir")
+    local project_dir_name
+    project_dir_name=$(basename "$toplevel")
+
+    # Count absolute paths in added lines (lines starting with +, not ++)
+    # Exclude lines inside fenced code blocks marked as example/template
+    # and lines using placeholder syntax
+    local path_count=0
+    local in_example_block=false
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^\+.*\`\`\`.*example ]] || [[ "$line" =~ ^\+.*\`\`\`.*template ]]; then
+            in_example_block=true
+            continue
+        fi
+        if [[ "$line" =~ ^\+.*\`\`\` ]] && $in_example_block; then
+            in_example_block=false
+            continue
+        fi
+        if $in_example_block; then
+            continue
+        fi
+
+        # Only look at added lines (not header lines ++)
+        if [[ "$line" =~ ^\+[^+] ]] || [[ "$line" =~ ^\+$ ]]; then
+            # Skip lines with placeholder syntax
+            if echo "$line" | grep -qE '<project-root>/|[$]HOME/|~/[.]config/'; then
+                continue
+            fi
+            # Check for absolute paths
+            if echo "$line" | grep -qE '/Users/[^/]+/|/home/[^/]+/'; then
+                path_count=$((path_count + 1))
+            elif [[ -n "$project_dir_name" ]] && echo "$line" | grep -qE "/($project_dir_name)/"; then
+                path_count=$((path_count + 1))
+            fi
+        fi
+    done <<< "$diff_content"
+
+    if [[ "$path_count" -eq 0 ]]; then
+        printf '0.0\tno absolute paths detected in diff'
+    elif [[ "$path_count" -le 2 ]]; then
+        printf '%s\tdiff contains %d absolute path reference(s) — likely project-specific' "-0.4" "$path_count"
+    else
+        printf '%s\tdiff contains %d absolute path references — definitely project-specific' "-0.8" "$path_count"
+    fi
+}
+
+# Run PROJECT_NAME_DETECTION heuristic on a diff string.
+# Outputs: <score>\t<reason>
+evolve_heuristic_project_name_detection() {
+    local dir="$1"
+    local diff_content="$2"
+
+    # Extract project name from git remote and directory
+    local project_name_remote project_name_dir
+    project_name_remote=$(git -C "$dir" remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git$//' || true)
+    project_name_dir=$(basename "$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null || echo "$dir")")
+
+    local project_name="${project_name_remote:-$project_name_dir}"
+
+    if [[ -z "$project_name" ]] || [[ "$project_name" == "." ]]; then
+        printf '0.0\tcould not determine project name'
+        return
+    fi
+
+    # Count occurrences in added lines, excluding file paths and metadata fields
+    local name_in_logic=0
+    local name_in_hardcoded=0
+
+    while IFS= read -r line; do
+        # Only check added lines
+        if [[ "$line" =~ ^\+[^+] ]]; then
+            # Skip lines that are metadata fields (project_name, CHANGELOG entries)
+            if echo "$line" | grep -qiE '"project_name"|changelog|"derived from'; then
+                continue
+            fi
+            # Check for project name in non-path context
+            # Use awk to strip path-like segments before checking
+            local stripped
+            stripped=$(printf '%s' "$line" | awk '{gsub(/\/[^ ]*/, ""); print}')
+            if echo "$stripped" | grep -qi "$project_name"; then
+                # Check if it's in a conditional or hardcoded string
+                if echo "$line" | grep -qE "if.*[\"'].*${project_name}|=.*[\"'].*${project_name}|\[.*${project_name}.*\]"; then
+                    name_in_hardcoded=$((name_in_hardcoded + 1))
+                else
+                    name_in_logic=$((name_in_logic + 1))
+                fi
+            fi
+        fi
+    done <<< "$diff_content"
+
+    local total=$((name_in_logic + name_in_hardcoded))
+
+    if [[ "$total" -eq 0 ]]; then
+        printf '0.0\tno project name references detected'
+    elif [[ "$name_in_hardcoded" -gt 0 ]]; then
+        printf '%s\tdiff contains project name "%s" in hardcoded strings' "-0.7" "$project_name"
+    else
+        printf '%s\tdiff contains project name "%s" in logic/conditions' "-0.5" "$project_name"
+    fi
+}
+
+# Run GENERIC_PATTERN heuristic on a diff string for a playbook file.
+# Outputs: <score>\t<reason>
+evolve_heuristic_generic_pattern() {
+    local diff_content="$1"
+
+    # Check if diff adds new sections (## or ### headings)
+    local new_sections=0
+    local added_lines=0
+    local is_modification=false
+
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^\+[^+] ]]; then
+            added_lines=$((added_lines + 1))
+            if [[ "$line" =~ ^\+###?\ .+ ]]; then
+                new_sections=$((new_sections + 1))
+            fi
+        fi
+        if [[ "$line" =~ ^-[^-] ]]; then
+            is_modification=true
+        fi
+    done <<< "$diff_content"
+
+    if [[ "$new_sections" -gt 0 ]] && [[ "$added_lines" -ge 10 ]]; then
+        printf '0.8\tnew self-contained section(s) (%d headings, %d lines added) — highly generalizable' "$new_sections" "$added_lines"
+    elif [[ "$new_sections" -gt 0 ]]; then
+        printf '0.5\tnew section with limited content — generalizable with edits'
+    elif $is_modification && [[ "$added_lines" -ge 5 ]]; then
+        printf '0.6\tmodification to existing section with generic improvement (%d lines)' "$added_lines"
+    elif $is_modification; then
+        printf '0.2\tminor modification — low generalizability'
+    else
+        printf '0.3\tsmall change — uncertain generalizability'
+    fi
+}
+
+# Run HOOK_FIX heuristic: check if a hook script diff has evidence in intercepts.
+# Outputs: <score>\t<reason>
+evolve_heuristic_hook_fix() {
+    local dir="$1"
+    local source_file="$2"
+
+    local log_file="$dir/.selfmodel/state/hook-intercepts.log"
+    if [[ ! -f "$log_file" ]] || [[ ! -s "$log_file" ]]; then
+        printf '0.1\tno hook intercept log available'
+        return
+    fi
+
+    # Extract hook name from source file
+    local hook_name
+    hook_name=$(basename "$source_file" .sh)
+
+    local intercept_count
+    intercept_count=$({ grep -c "hook=${hook_name} " "$log_file" || true; } 2>/dev/null | tr -d '[:space:]')
+    # Ensure we have a clean integer
+    intercept_count="${intercept_count:-0}"
+    [[ "$intercept_count" =~ ^[0-9]+$ ]] || intercept_count=0
+
+    if [[ "$intercept_count" -ge 5 ]]; then
+        printf '0.9\thook fix backed by %d intercepts — strong evidence' "$intercept_count"
+    elif [[ "$intercept_count" -ge 3 ]]; then
+        printf '0.7\thook fix backed by %d intercepts — moderate evidence' "$intercept_count"
+    elif [[ "$intercept_count" -gt 0 ]]; then
+        printf '0.3\thook fix with %d intercept(s) — weak evidence' "$intercept_count"
+    else
+        printf '0.1\thook change with no intercept log correlation'
+    fi
+}
+
+# Run SCORING_CALIBRATION heuristic for quality-gates.md changes.
+# Outputs: <score>\t<reason>
+evolve_heuristic_scoring_calibration() {
+    local dir="$1"
+
+    local quality_file="$dir/.selfmodel/state/quality.jsonl"
+    if [[ ! -f "$quality_file" ]] || [[ ! -s "$quality_file" ]]; then
+        printf '0.3\tno quality data available — speculative calibration'
+        return
+    fi
+
+    local entry_count
+    entry_count=$(wc -l < "$quality_file" | tr -d ' ')
+
+    if [[ "$entry_count" -ge 10 ]]; then
+        printf '0.85\tscoring calibration backed by %d quality entries — strong trend data' "$entry_count"
+    elif [[ "$entry_count" -ge 5 ]]; then
+        printf '0.65\tscoring calibration backed by %d quality entries — moderate data' "$entry_count"
+    else
+        printf '0.3\tscoring calibration with %d entries — weak/ambiguous trend' "$entry_count"
+    fi
+}
+
+# Score all applicable heuristics for a given file diff.
+# Outputs JSON: {"heuristic":"<name>","score":<float>,"reason":"<string>"}
+evolve_score_heuristics() {
+    local dir="$1"
+    local source_file="$2"
+    local diff_content="$3"
+
+    local base_positive=0
+    local base_heuristic=""
+    local base_reason=""
+    local negative_sum=0
+    local negative_reasons=""
+
+    # Always run PATH_DETECTION
+    local path_result
+    path_result=$(evolve_heuristic_path_detection "$dir" "$diff_content")
+    local path_score path_reason
+    path_score=$(echo "$path_result" | cut -f1)
+    path_reason=$(echo "$path_result" | cut -f2-)
+    if [[ "$path_score" != "0.0" ]]; then
+        negative_sum=$(echo "$negative_sum + $path_score" | bc 2>/dev/null || echo "$path_score")
+        negative_reasons="path_detection: $path_reason"
+    fi
+
+    # Always run PROJECT_NAME_DETECTION
+    local name_result
+    name_result=$(evolve_heuristic_project_name_detection "$dir" "$diff_content")
+    local name_score name_reason
+    name_score=$(echo "$name_result" | cut -f1)
+    name_reason=$(echo "$name_result" | cut -f2-)
+    if [[ "$name_score" != "0.0" ]]; then
+        negative_sum=$(echo "$negative_sum + $name_score" | bc 2>/dev/null || echo "$name_score")
+        if [[ -n "$negative_reasons" ]]; then
+            negative_reasons="$negative_reasons; project_name: $name_reason"
+        else
+            negative_reasons="project_name: $name_reason"
+        fi
+    fi
+
+    # Determine which positive heuristic to run based on file type
+    if [[ "$source_file" == *hooks/* ]] || [[ "$source_file" == *enforce-*.sh ]]; then
+        local hook_result
+        hook_result=$(evolve_heuristic_hook_fix "$dir" "$source_file")
+        local hook_score hook_reason
+        hook_score=$(echo "$hook_result" | cut -f1)
+        hook_reason=$(echo "$hook_result" | cut -f2-)
+        # Use awk for float comparison (bc might not be available)
+        if awk "BEGIN {exit !($hook_score > $base_positive)}" 2>/dev/null; then
+            base_positive="$hook_score"
+            base_heuristic="hook_fix"
+            base_reason="$hook_reason"
+        fi
+    fi
+
+    if [[ "$source_file" == *quality-gates* ]]; then
+        local cal_result
+        cal_result=$(evolve_heuristic_scoring_calibration "$dir")
+        local cal_score cal_reason
+        cal_score=$(echo "$cal_result" | cut -f1)
+        cal_reason=$(echo "$cal_result" | cut -f2-)
+        if awk "BEGIN {exit !($cal_score > $base_positive)}" 2>/dev/null; then
+            base_positive="$cal_score"
+            base_heuristic="scoring_calibration"
+            base_reason="$cal_reason"
+        fi
+    fi
+
+    if [[ "$source_file" == *playbook/* ]] || [[ "$source_file" == *scripts/* ]]; then
+        local gen_result
+        gen_result=$(evolve_heuristic_generic_pattern "$diff_content")
+        local gen_score gen_reason
+        gen_score=$(echo "$gen_result" | cut -f1)
+        gen_reason=$(echo "$gen_result" | cut -f2-)
+        if awk "BEGIN {exit !($gen_score > $base_positive)}" 2>/dev/null; then
+            base_positive="$gen_score"
+            base_heuristic="generic_pattern"
+            base_reason="$gen_reason"
+        fi
+    fi
+
+    # Default heuristic if nothing matched
+    if [[ -z "$base_heuristic" ]]; then
+        base_heuristic="generic_pattern"
+        base_positive="0.3"
+        base_reason="no specific heuristic matched — default score"
+    fi
+
+    # Compute final score: base_positive + negative_sum, clamped to [0.0, 1.0]
+    local final_score
+    final_score=$(awk "BEGIN {
+        s = $base_positive + $negative_sum;
+        if (s < 0) s = 0;
+        if (s > 1) s = 1;
+        printf \"%.2f\", s
+    }" 2>/dev/null || echo "0.30")
+
+    # Compose combined reason
+    local combined_reason="$base_reason"
+    if [[ -n "$negative_reasons" ]]; then
+        combined_reason="$base_reason; $negative_reasons"
+    fi
+
+    # Output as tab-separated: heuristic, score, reason
+    printf '%s\t%s\t%s' "$base_heuristic" "$final_score" "$combined_reason"
+}
+
+# Append a CANDIDATE entry to evolution.jsonl.
+evolve_append_candidate() {
+    local dir="$1"
+    local source_file="$2"
+    local category="$3"
+    local summary="$4"
+    local description="$5"
+    local diff_stats="$6"
+    local heuristic="$7"
+    local score="$8"
+    local reason="$9"
+    local evidence_sprints="${10:-[]}"
+    local evidence_quality="${11:-null}"
+    local evidence_intercepts="${12:-0}"
+    local evidence_lesson="${13:-null}"
+
+    local evo_file="$dir/.selfmodel/state/evolution.jsonl"
+    local team_file="$dir/.selfmodel/state/team.json"
+    local version_file="$dir/VERSION"
+
+    # Generate unique ID: evo-YYYY-MM-DD-NNN
+    local today
+    today=$(date -u +%Y-%m-%d)
+    local existing_today=0
+    if [[ -f "$evo_file" ]]; then
+        existing_today=$({ grep -c "\"evo-${today}-" "$evo_file" || true; } 2>/dev/null)
+    fi
+    local seq_num
+    seq_num=$(printf '%03d' $((existing_today + 1)))
+    local evo_id="evo-${today}-${seq_num}"
+
+    # Get current sprint from team.json
+    local current_sprint=0
+    if [[ -f "$team_file" ]]; then
+        current_sprint=$(jq -r '.current_sprint // 0' "$team_file" 2>/dev/null || echo 0)
+    fi
+
+    # Get project name
+    local project_name
+    project_name=$(git -C "$dir" remote get-url origin 2>/dev/null | sed 's/.*\///' | sed 's/\.git$//' || basename "$dir")
+
+    # Get selfmodel version
+    local sm_version="$SELFMODEL_VERSION"
+    if [[ -f "$version_file" ]]; then
+        sm_version=$(tr -d '[:space:]' < "$version_file")
+    fi
+
+    local timestamp
+    timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+    # Build JSON entry using jq for correctness
+    local json_entry
+    json_entry=$(jq -cn \
+        --arg id "$evo_id" \
+        --arg status "CANDIDATE" \
+        --arg category "$category" \
+        --arg source_file "$source_file" \
+        --arg upstream_file "$source_file" \
+        --arg summary "$summary" \
+        --arg description "$description" \
+        --argjson evidence_sprints "$evidence_sprints" \
+        --arg evidence_quality "$evidence_quality" \
+        --argjson evidence_intercepts "$evidence_intercepts" \
+        --arg evidence_lesson "$evidence_lesson" \
+        --arg heuristic "$heuristic" \
+        --argjson score "$score" \
+        --arg reason "$reason" \
+        --arg diff_stats "$diff_stats" \
+        --argjson sprint "$current_sprint" \
+        --arg detected_at "$timestamp" \
+        --arg project_name "$project_name" \
+        --arg sm_version "$sm_version" \
+        '{
+            id: $id,
+            status: $status,
+            category: $category,
+            source_file: $source_file,
+            upstream_file: $upstream_file,
+            summary: $summary,
+            description: $description,
+            evidence: {
+                sprints_affected: $evidence_sprints,
+                quality_trend: (if $evidence_quality == "null" then null else $evidence_quality end),
+                hook_intercepts: $evidence_intercepts,
+                lessons_learned_ref: (if $evidence_lesson == "null" then null else $evidence_lesson end)
+            },
+            heuristic: $heuristic,
+            generalizability_score: $score,
+            generalizability_reason: $reason,
+            diff_stats: $diff_stats,
+            detected_at_sprint: $sprint,
+            detected_at: $detected_at,
+            staged_at: null,
+            submitted_at: null,
+            pr_url: null,
+            pr_status: null,
+            reviewed_by: null,
+            project_name: $project_name,
+            selfmodel_version: $sm_version
+        }')
+
+    # Append to evolution.jsonl (create if needed)
+    echo "$json_entry" >> "$evo_file"
+    echo "$evo_id"
+}
+
+# Determine the category of a changed file.
+evolve_categorize_file() {
+    local filepath="$1"
+    case "$filepath" in
+        .selfmodel/playbook/*)     echo "playbook_patch" ;;
+        .selfmodel/hooks/*)        echo "hook_improvement" ;;
+        scripts/*.sh)              echo "script_fix" ;;
+        scripts/*)                 echo "script_fix" ;;
+        *)                         echo "playbook_patch" ;;
+    esac
+}
+
+# Generate a one-line summary from a diff for a given file.
+evolve_summarize_diff() {
+    local dir="$1"
+    local filepath="$2"
+    local diff_content="$3"
+
+    local added removed
+    added=$(printf '%s\n' "$diff_content" | { grep -c '^+[^+]' || true; } 2>/dev/null)
+    removed=$(printf '%s\n' "$diff_content" | { grep -c '^-[^-]' || true; } 2>/dev/null)
+
+    # Extract first meaningful added line as context
+    local first_added
+    first_added=$(printf '%s\n' "$diff_content" | grep '^+[^+]' | head -1 | sed 's/^+//' | sed 's/^[[:space:]]*//' | head -c 80)
+
+    local basename_file
+    basename_file=$(basename "$filepath")
+    echo "Modified $basename_file: $first_added (+${added}/-${removed} lines)"
+}
+
+# Main detection logic: scan diffs, run heuristics, write candidates.
+evolve_detect() {
+    local dir="$1"
+    local selfmodel_dir="$dir/.selfmodel"
+
+    info "Starting evolution detection scan..."
+
+    # Step 1: Establish baseline
+    local baseline
+    if ! baseline=$(evolve_establish_baseline "$dir"); then
+        warn "No upstream baseline available."
+        warn "Run 'selfmodel update --remote' to establish a baseline,"
+        warn "or add a git remote named 'upstream',"
+        warn "or write a SHA to .selfmodel/state/upstream-baseline.sha"
+        return 1
+    fi
+    info "Using baseline: $(bold "$baseline")"
+
+    # Step 2: Scan diffs
+    local diff_files
+    diff_files=$(evolve_scan_diffs "$dir" "$baseline")
+
+    if [[ -z "$diff_files" ]]; then
+        info "No diffs found between baseline and HEAD in playbook/hooks/scripts."
+    fi
+
+    local candidate_count=0
+    local playbook_count=0
+    local hook_count=0
+    local script_count=0
+    local lesson_count=0
+
+    # Step 3: Process each changed file
+    if [[ -n "$diff_files" ]]; then
+        while IFS=$'\t' read -r added removed filepath; do
+            [[ -z "$filepath" ]] && continue
+
+            local category
+            category=$(evolve_categorize_file "$filepath")
+
+            # Get full diff for this file
+            local file_diff
+            file_diff=$(git -C "$dir" diff "${baseline}..HEAD" -- "$filepath" 2>/dev/null)
+            if [[ -z "$file_diff" ]]; then
+                continue
+            fi
+
+            # Run heuristics
+            local heuristic_result
+            heuristic_result=$(evolve_score_heuristics "$dir" "$filepath" "$file_diff")
+            local heuristic_name heuristic_score heuristic_reason
+            heuristic_name=$(echo "$heuristic_result" | cut -f1)
+            heuristic_score=$(echo "$heuristic_result" | cut -f2)
+            heuristic_reason=$(echo "$heuristic_result" | cut -f3-)
+
+            # Generate summary and description
+            local summary
+            summary=$(evolve_summarize_diff "$dir" "$filepath" "$file_diff")
+            summary="${summary:0:120}"
+            local description="Detected diff in $filepath against baseline $baseline. $heuristic_reason"
+            local basename_for_stats
+            basename_for_stats=$(basename "$filepath")
+            local diff_stats="+${added} -${removed} lines in ${basename_for_stats}"
+
+            # Check for duplicate (same source_file already CANDIDATE)
+            local evo_file="$selfmodel_dir/state/evolution.jsonl"
+            if [[ -f "$evo_file" ]]; then
+                local existing
+                existing=$(jq -r "select(.source_file == \"$filepath\" and .status == \"CANDIDATE\") | .id" "$evo_file" 2>/dev/null | tail -1)
+                if [[ -n "$existing" ]]; then
+                    continue
+                fi
+            fi
+
+            # Append candidate
+            local evo_id
+            evo_id=$(evolve_append_candidate "$dir" "$filepath" "$category" \
+                "$summary" "$description" "$diff_stats" \
+                "$heuristic_name" "$heuristic_score" "$heuristic_reason")
+
+            candidate_count=$((candidate_count + 1))
+            case "$category" in
+                playbook_patch) playbook_count=$((playbook_count + 1)) ;;
+                hook_improvement) hook_count=$((hook_count + 1)) ;;
+                script_fix) script_count=$((script_count + 1)) ;;
+            esac
+
+            info "  [$evo_id] $category  score=$heuristic_score  $filepath"
+        done <<< "$diff_files"
+    fi
+
+    # Step 4: Scan lessons-learned.md for validated lessons
+    local lessons
+    lessons=$(evolve_scan_lessons "$dir")
+    if [[ -n "$lessons" ]]; then
+        while IFS=$'\t' read -r sprint_ref lesson_text; do
+            [[ -z "$sprint_ref" ]] && continue
+            [[ -z "$lesson_text" ]] && continue
+
+            # Check for duplicate lesson candidate
+            local evo_file="$selfmodel_dir/state/evolution.jsonl"
+            if [[ -f "$evo_file" ]]; then
+                local existing
+                existing=$(jq -r "select(.evidence.lessons_learned_ref == \"$sprint_ref\" and .status == \"CANDIDATE\") | .id" "$evo_file" 2>/dev/null | tail -1)
+                if [[ -n "$existing" ]]; then
+                    continue
+                fi
+            fi
+
+            local summary="Validated lesson: ${lesson_text:0:100}"
+            local evo_id
+            evo_id=$(evolve_append_candidate "$dir" ".selfmodel/playbook/lessons-learned.md" \
+                "new_lesson" "$summary" "Lesson from $sprint_ref validated as improved. $lesson_text" \
+                "lesson entry" "generic_pattern" "0.60" \
+                "validated lesson with improved result — likely generalizable" \
+                "[]" "null" "0" "$sprint_ref")
+
+            candidate_count=$((candidate_count + 1))
+            lesson_count=$((lesson_count + 1))
+            info "  [$evo_id] new_lesson  score=0.60  $sprint_ref"
+        done <<< "$lessons"
+    fi
+
+    # Step 5: Scan hook intercepts for recurring patterns
+    local intercepts
+    intercepts=$(evolve_scan_intercepts "$dir")
+    if [[ -n "$intercepts" ]]; then
+        while IFS=$'\t' read -r hook reason count; do
+            [[ -z "$hook" ]] && continue
+
+            # Check if there's already a hook_improvement candidate for this hook
+            local evo_file="$selfmodel_dir/state/evolution.jsonl"
+            local hook_script_candidates=0
+            if [[ -f "$evo_file" ]]; then
+                hook_script_candidates=$(jq -r "select(.source_file | contains(\"$hook\")) | .id" "$evo_file" 2>/dev/null | wc -l | tr -d ' ')
+            fi
+
+            if [[ "$hook_script_candidates" -gt 0 ]]; then
+                # Already covered by a diff-based candidate; skip standalone intercept entry
+                continue
+            fi
+
+            local summary="Hook intercept pattern: $hook ($reason, ${count}x)"
+            local score="0.70"
+            if [[ "$count" -ge 5 ]]; then
+                score="0.90"
+            fi
+
+            local evo_id
+            evo_id=$(evolve_append_candidate "$dir" ".selfmodel/hooks/${hook}.sh" \
+                "hook_improvement" "${summary:0:120}" \
+                "Recurring hook intercept: hook=$hook reason=$reason repeated $count times" \
+                "intercept pattern" "hook_fix" "$score" \
+                "hook intercept pattern with $count occurrences — likely false positive to fix" \
+                "[]" "null" "$count" "null")
+
+            candidate_count=$((candidate_count + 1))
+            hook_count=$((hook_count + 1))
+            info "  [$evo_id] hook_improvement  score=$score  $hook ($reason, ${count}x)"
+        done <<< "$intercepts"
+    fi
+
+    # Step 6: Output summary
+    echo ""
+    if [[ "$candidate_count" -eq 0 ]]; then
+        ok "No evolution candidates detected."
+    else
+        ok "Detected $candidate_count candidate(s): $playbook_count playbook patch(es), $hook_count hook fix(es), $script_count script fix(es), $lesson_count lesson(s)"
+    fi
+
+    return 0
+}
+
+# Display evolution pipeline status by reading evolution.jsonl.
+evolve_status() {
+    local dir="$1"
+    local evo_file="$dir/.selfmodel/state/evolution.jsonl"
+    local team_file="$dir/.selfmodel/state/team.json"
+
+    if [[ ! -f "$evo_file" ]] || [[ ! -s "$evo_file" ]]; then
+        info "No evolution entries found. Run 'selfmodel evolve --detect' first."
+        return 0
+    fi
+
+    echo "Evolution Pipeline Status"
+    echo "─────────────────────────"
+
+    # Count by status
+    local statuses=("CANDIDATE" "STAGED" "SUBMITTED" "ACCEPTED" "REJECTED_PROJECT_SPECIFIC" "REJECTED_UPSTREAM" "CONFLICT" "SUPERSEDED")
+    for status in "${statuses[@]}"; do
+        local count
+        count=$(jq -r "select(.status == \"$status\") | .id" "$evo_file" 2>/dev/null | wc -l | tr -d ' ')
+        if [[ "$count" -gt 0 ]]; then
+            printf '%-30s %d\n' "${status}:" "$count"
+        fi
+    done
+
+    echo "─────────────────────────"
+
+    # Last detect info
+    local last_detect_sprint last_detect_date
+    last_detect_sprint=$(jq -r '.detected_at_sprint // 0' "$evo_file" 2>/dev/null | sort -rn | head -1)
+    last_detect_date=$(jq -r '.detected_at // ""' "$evo_file" 2>/dev/null | sort -r | head -1)
+    if [[ -n "$last_detect_date" ]]; then
+        local date_part="${last_detect_date%%T*}"
+        printf 'Last detect: Sprint %s (%s)\n' "$last_detect_sprint" "$date_part"
+    fi
+
+    # Next detect estimate (every 10 sprints)
+    if [[ -f "$team_file" ]]; then
+        local current_sprint last_review
+        current_sprint=$(jq -r '.current_sprint // 0' "$team_file" 2>/dev/null)
+        last_review=$(jq -r '.evolution.last_review_sprint // 0' "$team_file" 2>/dev/null)
+        local next_detect=$((last_review + 10))
+        if [[ "$next_detect" -le "$current_sprint" ]]; then
+            echo "Next detect: now (overdue)"
+        else
+            printf 'Next detect: ~Sprint %d\n' "$next_detect"
+        fi
+    fi
+}
+
+# Main evolve command: parse flags and route.
+cmd_evolve() {
+    [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]] && {
+        echo "Usage: selfmodel evolve [flags]"
+        echo ""
+        echo "  Evolution pipeline: detect local improvements, classify generalizability,"
+        echo "  package patches, and submit PRs to upstream selfmodel."
+        echo ""
+        echo "Flags:"
+        echo "  --detect     Scan playbook/hooks/scripts diffs against upstream baseline"
+        echo "               Writes CANDIDATE entries to .selfmodel/state/evolution.jsonl"
+        echo "               This is the default action when no flag is specified."
+        echo "  --status     Show evolution pipeline status (counts by lifecycle state)"
+        echo "  --stage      Interactively classify CANDIDATE entries (not yet implemented)"
+        echo "  --submit     Create upstream PR from STAGED patches (not yet implemented)"
+        echo "  --track      Monitor submitted PR statuses (not yet implemented)"
+        echo "  --help       Show this help message"
+        echo ""
+        echo "Examples:"
+        echo "  selfmodel evolve                 # Run detection (default)"
+        echo "  selfmodel evolve --detect        # Explicit detection scan"
+        echo "  selfmodel evolve --status        # View pipeline status"
+        return 0
+    }
+
+    local dir="."
+    local action="detect"
+
+    # Parse flags
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --detect)  action="detect"; shift ;;
+            --status)  action="status"; shift ;;
+            --stage)
+                info "Stage phase not yet implemented — see Sprint C."
+                return 0
+                ;;
+            --submit)
+                info "Submit phase not yet implemented — see Sprint C."
+                return 0
+                ;;
+            --track)
+                info "Track phase not yet implemented — see Sprint C."
+                return 0
+                ;;
+            *)  dir="$1"; shift ;;
+        esac
+    done
+
+    local selfmodel_dir="$dir/.selfmodel"
+    if [[ ! -d "$selfmodel_dir" ]]; then
+        err "No .selfmodel/ directory found. Run 'selfmodel init' first."
+        exit 1
+    fi
+
+    case "$action" in
+        detect) evolve_detect "$dir" ;;
+        status) evolve_status "$dir" ;;
+        *)
+            err "Unknown evolve action: $action"
+            return 1
+            ;;
+    esac
+}
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 main() {
     local cmd="${1:-help}"
@@ -1580,6 +2426,7 @@ main() {
         adapt)   check_deps; cmd_adapt "$@" ;;
         update)  check_deps; cmd_update "$@" ;;
         status)  check_deps; cmd_status "$@" ;;
+        evolve)  check_deps; cmd_evolve "$@" ;;
         version) cmd_version "$@" ;;
         -v)      cmd_version "$@" ;;
         --version) cmd_version "$@" ;;
@@ -1595,6 +2442,11 @@ main() {
             echo "             --remote    Fetch latest from GitHub (instead of local templates)"
             echo "             --version   Specify version/tag (default: main)"
             echo "  status   Show team health dashboard"
+            echo "  evolve   Evolution pipeline: detect improvements, classify, submit upstream"
+            echo "             --detect    Scan diffs against upstream baseline (default)"
+            echo "             --status    Show pipeline status counts"
+            echo "             --stage     Classify candidates (Sprint C)"
+            echo "             --submit    Submit PRs upstream (Sprint C)"
             echo "  version  Show version"
             echo ""
             echo "Examples:"
@@ -1604,6 +2456,8 @@ main() {
             echo "  selfmodel update                     # Update playbook from local templates"
             echo "  selfmodel update --remote            # Fetch latest from GitHub (main branch)"
             echo "  selfmodel update --remote --version v0.3.0  # Fetch specific version"
+            echo "  selfmodel evolve                     # Detect evolution candidates"
+            echo "  selfmodel evolve --status            # View evolution pipeline status"
             ;;
         *)
             err "Unknown command: $cmd"
