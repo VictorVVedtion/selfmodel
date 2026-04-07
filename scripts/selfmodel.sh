@@ -911,6 +911,28 @@ cmd_status() {
 # Code file extensions used to detect whether a directory contains code
 WIKI_CODE_EXTENSIONS='*.py *.js *.ts *.tsx *.jsx *.go *.rs *.rb *.java *.kt *.swift *.c *.cpp *.h *.cs *.php *.sh *.lua *.ex *.exs *.zig *.nim *.ml *.hs *.scala *.clj'
 
+# Find code files in a directory (bash 3.2 compatible — no negative array indices)
+_wiki_find_code() {
+    local search_dir="$1"
+    local depth="${2:-2}"
+    local first_only="${3:-}"
+    local args=""
+    local first=true
+    for ext in $WIKI_CODE_EXTENSIONS; do
+        if $first; then
+            args="-name $ext"
+            first=false
+        else
+            args="$args -o -name $ext"
+        fi
+    done
+    if [[ -n "$first_only" ]]; then
+        eval "find \"$search_dir\" -maxdepth $depth -type f \\( $args \\) 2>/dev/null | head -1"
+    else
+        eval "find \"$search_dir\" -maxdepth $depth -type f \\( $args \\) 2>/dev/null | head -10"
+    fi
+}
+
 # Directories excluded from module scanning
 WIKI_EXCLUDE_PATTERN='^(\.|node_modules|__pycache__|\.venv|venv|vendor|dist|build|\.selfmodel|\.claude|\.github|\.vscode|\.idea|\.next|\.nuxt|coverage|tmp|temp|\.cache|\.turbo|target|out|bin|obj)$'
 
@@ -924,19 +946,11 @@ generate_module_page() {
 
     # Collect up to 10 key files in this module (by extension)
     local key_files=()
-    local find_args=()
-    for ext in $WIKI_CODE_EXTENSIONS; do
-        find_args+=(-name "$ext" -o)
-    done
-    # Remove trailing -o
-    unset 'find_args[-1]'
-
     while IFS= read -r f; do
         [[ -z "$f" ]] && continue
-        # Make path relative to project root
         local rel="${f#"$project_dir"/}"
         key_files+=("$rel")
-    done < <(find "$project_dir/$module_name" -maxdepth 3 -type f \( "${find_args[@]}" \) 2>/dev/null | head -10)
+    done < <(_wiki_find_code "$project_dir/$module_name" 3)
 
     cat > "$module_file" << MODEOF
 # ${module_name}
@@ -1054,14 +1068,8 @@ SCHEMAEOF
         fi
 
         # Check if directory contains code files (up to depth 2)
-        local find_args=()
-        for ext in $WIKI_CODE_EXTENSIONS; do
-            find_args+=(-name "$ext" -o)
-        done
-        unset 'find_args[-1]'
-
         local has_code
-        has_code=$(find "$entry" -maxdepth 2 -type f \( "${find_args[@]}" \) 2>/dev/null | head -1)
+        has_code=$(_wiki_find_code "$entry" 2 first)
         [[ -z "$has_code" ]] && continue
 
         # Enforce max 20 modules
@@ -1199,14 +1207,8 @@ reconcile_wiki() {
             continue
         fi
 
-        local find_args=()
-        for ext in $WIKI_CODE_EXTENSIONS; do
-            find_args+=(-name "$ext" -o)
-        done
-        unset 'find_args[-1]'
-
         local has_code
-        has_code=$(find "$entry" -maxdepth 2 -type f \( "${find_args[@]}" \) 2>/dev/null | head -1)
+        has_code=$(_wiki_find_code "$entry" 2 first)
         [[ -z "$has_code" ]] && continue
 
         if [[ $total_scanned -ge 20 ]]; then
