@@ -97,6 +97,7 @@ project/
     ├── inbox/{gemini,codex,opus,research,evaluator,e2e}/
     ├── hooks/                         # Hook scripts (copied from skill)
     ├── artifacts/                     # E2E verification evidence
+    ├── wiki/                          # Project knowledge base (auto-managed)
     ├── reviews/                       # Evaluation verdicts
     └── state/
         ├── team.json                  # Agent roster + stats
