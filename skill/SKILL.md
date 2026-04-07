@@ -16,15 +16,15 @@ specialized agents via Sprint contracts, worktree isolation, and independent qua
 
 ## Sub-Commands
 
-| Command | Purpose |
-|---------|---------|
-| `/selfmodel:init` | Initialize selfmodel in any project |
-| `/selfmodel:sprint` | Create contract + dispatch agent |
-| `/selfmodel:review` | Evaluate + E2E verify + merge/reject |
-| `/selfmodel:status` | View team, sprints, and quality trends |
-| `/selfmodel:plan` | Create/update multi-phase orchestration plan |
-| `/selfmodel:loop` | Auto-orchestration loop (plan-driven) |
-| `/selfmodel:evolve` | Evolution-to-PR pipeline for upstream improvements |
+| Command | Type | Purpose |
+|---------|------|---------|
+| `/selfmodel:plan` | Primary | Create/update multi-phase orchestration plan |
+| `/selfmodel:sprint` | Primary | Create contract + dispatch agent |
+| `/selfmodel:review` | Primary | Evaluate + E2E verify + merge/reject |
+| `/selfmodel:loop` | Primary | Auto-orchestration loop (plan-driven) |
+| `/selfmodel:init` | Convenience (CLI preferred) | Initialize selfmodel in any project |
+| `/selfmodel:status` | Convenience (CLI preferred) | View team, sprints, and quality trends |
+| `/selfmodel:evolve` | Convenience (CLI preferred) | Evolution-to-PR pipeline for upstream improvements |
 
 ## Core Architecture
 

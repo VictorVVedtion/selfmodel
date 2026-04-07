@@ -27,56 +27,62 @@ selfmodel is not a framework. It's a **living system** where AI agents design, i
 
 ## Quick Start
 
-### Install
+### 1. Install
 
 ```bash
 git clone https://github.com/VictorVVedtion/selfmodel.git
 cd selfmodel && bash install.sh
 ```
 
-This installs:
-- **Claude Code skill** → `~/.claude/skills/selfmodel/` (6 slash commands)
-- **CLI tool** → `/usr/local/bin/selfmodel` (may prompt for sudo)
-
-Then in Claude Code:
-
-```
-/selfmodel:init          # Initialize selfmodel in your project
-/selfmodel:plan          # Create a multi-phase orchestration plan
-/selfmodel:sprint        # Create and dispatch a Sprint
-/selfmodel:review        # Review a delivered Sprint
-/selfmodel:loop          # Auto-orchestration: plan → dispatch → review → merge → repeat
-/selfmodel:status        # View team status and quality trends
-```
-
-Or from any terminal:
+### 2. Setup
 
 ```bash
-selfmodel init           # Initialize in current project
-selfmodel adapt          # Adapt to existing project (non-destructive)
-selfmodel status         # Show team health dashboard
-selfmodel version        # Show version
-selfmodel --help         # Show all subcommands
+cd your-project
+selfmodel init
 ```
 
-### Update
+### 3. Build
+
+In Claude Code:
+
+```
+/selfmodel:loop
+```
+
+## Commands
+
+### Terminal (Setup & Maintenance)
+
+| Command | Description |
+|---------|-------------|
+| `selfmodel` | Smart dashboard — status + next action |
+| `selfmodel init [dir]` | Setup or update project (idempotent) |
+| `selfmodel update [--remote]` | Sync playbook from upstream |
+| `selfmodel evolve` | Contribute improvements upstream |
+| `selfmodel --help` | Full command reference |
+
+### Claude Code (Team Orchestration)
+
+| Command | Description |
+|---------|-------------|
+| `/selfmodel:plan` | Create multi-phase project plan |
+| `/selfmodel:sprint` | Create and dispatch a Sprint |
+| `/selfmodel:review` | Review a delivered Sprint |
+| `/selfmodel:loop` | Auto-orchestration (plan → dispatch → review → merge) |
+
+> **Tip**: Use `selfmodel` in terminal for status. Use `/selfmodel:loop` in Claude Code for orchestration.
+
+## Update
 
 ```bash
-# Update an existing project to latest version (hot-update, no restart needed)
 selfmodel update --remote
-
-# Update to a specific version
-selfmodel update --remote --version v0.3.0
-
-# If selfmodel CLI is not in PATH, use the script directly:
-bash /path/to/selfmodel/scripts/selfmodel.sh update --remote
 ```
 
-Remote update syncs: hooks, playbook, scripts, VERSION, dispatch config. Does NOT overwrite project state (team.json, contracts, plan).
+Use `selfmodel update --remote --version v0.3.0` to pin a specific release.
+Re-run `bash install.sh` to refresh the Claude Code slash commands.
+If `selfmodel` is not in PATH, use `bash /path/to/selfmodel/scripts/selfmodel.sh update --remote`.
 
-To update the Claude Code skill definitions (slash commands), re-run `bash install.sh` and start a new session.
-
-### Requirements
+## Requirements
 
 - `jq` (`brew install jq` on macOS, `apt install jq` on Linux)
 - Claude Code CLI installed (`~/.claude/` exists)
@@ -417,15 +423,18 @@ Every deliverable scored on 5 dimensions (see `playbook/quality-gates.md`):
 ### selfmodel CLI
 
 ```
-selfmodel init [directory]                        Create new selfmodel project
-selfmodel adapt [directory]                       Adapt to existing project (non-destructive)
-selfmodel update [--remote] [--version v0.3.0]    Update playbook + hooks to latest version
-selfmodel status                                  Show team health dashboard
-selfmodel version                                 Show version
-selfmodel --help                                  Show help
+selfmodel                                        Smart dashboard (default)
+selfmodel init [directory]                       Setup or update project
+selfmodel update [--remote] [--version v0.3.0]  Sync playbook + hooks to latest version
+selfmodel status                                 Show team health dashboard
+selfmodel evolve                                 Run the evolution pipeline
+selfmodel --help                                 Show full command reference
+selfmodel --version                              Show version
 ```
 
-All subcommands support `--help` for detailed usage.
+Deprecated alias: `selfmodel adapt [directory]` prints a warning and delegates to `selfmodel init`.
+
+All commands support `--help` for detailed usage where applicable.
 
 If `selfmodel` is not in PATH, use `bash /path/to/selfmodel/scripts/selfmodel.sh` instead.
 
