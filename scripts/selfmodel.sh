@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # selfmodel — AI Agent Team 工作流初始化与适配工具
-# Usage: selfmodel <init|adapt|update|version> [options]
+# Usage: selfmodel [command] [options]
+# With no args, shows smart dashboard. Run selfmodel --help for full reference.
 # Requires: jq (for JSON processing). macOS + Linux.
 set -eo pipefail
 
@@ -346,10 +347,11 @@ cmd_init() {
 
     info "Initializing selfmodel in $(bold "$dir")"
 
-    # Check for existing selfmodel
+    # Idempotent: if .selfmodel/ already exists, run non-destructive adapt logic
     if [[ -d "$dir/.selfmodel" ]]; then
-        warn ".selfmodel/ already exists. Use 'selfmodel adapt' instead."
-        exit 1
+        info ".selfmodel/ exists. Running non-destructive update..."
+        _adapt_existing_project "$dir"
+        return 0
     fi
 
     # Detect if there's an existing project
@@ -410,30 +412,11 @@ cmd_init() {
     info "Next: review CLAUDE.md, then create your first Sprint contract."
 }
 
-# ─── CMD: adapt ───────────────────────────────────────────────────────────────
-cmd_adapt() {
-    [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]] && {
-        echo "Usage: selfmodel adapt [directory]"
-        echo ""
-        echo "  Adapt selfmodel to an existing project."
-        echo "  Re-detects project stack and updates configuration without overwriting agents or history."
-        echo ""
-        echo "Arguments:"
-        echo "  directory    Target directory (default: current directory)"
-        return 0
-    }
-
+# ─── Adapt Helper: non-destructive update for existing .selfmodel/ ────────────
+# Extracted from old cmd_adapt so both cmd_init (idempotent) and cmd_adapt
+# (deprecated alias) share the same body.  Takes one arg: target directory.
+_adapt_existing_project() {
     local dir="${1:-.}"
-
-    # Validate path
-    if [[ "$dir" != "." && ! -e "$dir" ]]; then
-        err "Directory does not exist: $dir"
-        exit 1
-    fi
-    if [[ "$dir" != "." && -e "$dir" && ! -d "$dir" ]]; then
-        err "Path is not a directory: $dir"
-        exit 1
-    fi
 
     info "Adapting selfmodel to existing project in $(bold "$dir")"
 
@@ -504,6 +487,12 @@ cmd_adapt() {
 
     echo ""
     ok "selfmodel adapted! ($SELFMODEL_VERSION)"
+}
+
+# ─── CMD: adapt (deprecated — delegates to cmd_init) ─────────────────────────
+cmd_adapt() {
+    warn "'selfmodel adapt' is deprecated. Use 'selfmodel init' (now idempotent)."
+    cmd_init "$@"
 }
 
 # ─── CMD: update ──────────────────────────────────────────────────────────────
@@ -3094,6 +3083,62 @@ evolve_status() {
     echo "═════════════════════════════════════════"
 }
 
+# ─── evolve_interactive: guided pipeline detect → stage → offer submit ────────
+evolve_interactive() {
+    local dir="$1"
+
+    info "Running interactive evolution pipeline..."
+    echo ""
+
+    # Phase 1: detect
+    info "Phase 1/3: Detecting evolution candidates..."
+    if ! evolve_detect "$dir"; then
+        warn "Detection encountered issues. Stopping interactive pipeline."
+        return 1
+    fi
+    echo ""
+
+    # Check if there are any CANDIDATE entries to stage
+    local evo_file="$dir/.selfmodel/state/evolution.jsonl"
+    local candidate_count=0
+    if [[ -f "$evo_file" ]] && [[ -s "$evo_file" ]]; then
+        candidate_count=$(jq -c 'select(.status == "CANDIDATE")' "$evo_file" 2>/dev/null | wc -l | tr -d ' ')
+    fi
+
+    if [[ "$candidate_count" -eq 0 ]]; then
+        info "No candidates to stage. Pipeline complete."
+        return 0
+    fi
+
+    # Phase 2: stage
+    info "Phase 2/3: Staging candidates ($candidate_count found)..."
+    confirm "Proceed to interactive staging?" || {
+        info "Skipped staging. Run 'selfmodel evolve --stage' later."
+        return 0
+    }
+    evolve_stage "$dir"
+    echo ""
+
+    # Check if there are any STAGED entries to submit
+    local staged_count=0
+    if [[ -f "$evo_file" ]] && [[ -s "$evo_file" ]]; then
+        staged_count=$(jq -c 'select(.status == "STAGED")' "$evo_file" 2>/dev/null | wc -l | tr -d ' ')
+    fi
+
+    if [[ "$staged_count" -eq 0 ]]; then
+        info "No staged entries to submit. Pipeline complete."
+        return 0
+    fi
+
+    # Phase 3: offer submit
+    info "Phase 3/3: $staged_count staged entries ready for upstream submission."
+    confirm "Submit staged patches as upstream PR?" || {
+        info "Skipped submission. Run 'selfmodel evolve --submit' later."
+        return 0
+    }
+    evolve_submit "$dir"
+}
+
 # Main evolve command: parse flags and route.
 cmd_evolve() {
     [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]] && {
@@ -3102,10 +3147,10 @@ cmd_evolve() {
         echo "  Evolution pipeline: detect local improvements, classify generalizability,"
         echo "  package patches, and submit PRs to upstream selfmodel."
         echo ""
+        echo "  With no flags, runs the interactive pipeline: detect → stage → submit."
+        echo ""
         echo "Flags:"
         echo "  --detect     Scan playbook/hooks/scripts diffs against upstream baseline"
-        echo "               Writes CANDIDATE entries to .selfmodel/state/evolution.jsonl"
-        echo "               This is the default action when no flag is specified."
         echo "  --status     Show evolution pipeline status (counts, timestamps, PR URLs)"
         echo "  --stage      Interactively classify CANDIDATE entries (Stage/Reject/Keep)"
         echo "  --submit     Create upstream PR from STAGED patches (requires gh CLI)"
@@ -3113,8 +3158,8 @@ cmd_evolve() {
         echo "  --help       Show this help message"
         echo ""
         echo "Examples:"
-        echo "  selfmodel evolve                 # Run detection (default)"
-        echo "  selfmodel evolve --detect        # Explicit detection scan"
+        echo "  selfmodel evolve                 # Interactive pipeline (default)"
+        echo "  selfmodel evolve --detect        # Detection scan only"
         echo "  selfmodel evolve --status        # View pipeline status"
         echo "  selfmodel evolve --stage         # Classify candidates interactively"
         echo "  selfmodel evolve --submit        # Submit staged patches as PR"
@@ -3123,7 +3168,7 @@ cmd_evolve() {
     }
 
     local dir="."
-    local action="detect"
+    local action="interactive"
 
     # Parse flags
     while [[ $# -gt 0 ]]; do
@@ -3144,11 +3189,12 @@ cmd_evolve() {
     fi
 
     case "$action" in
-        detect)  evolve_detect "$dir" ;;
-        status)  evolve_status "$dir" ;;
-        stage)   evolve_stage "$dir" ;;
-        submit)  evolve_submit "$dir" ;;
-        track)   evolve_track "$dir" ;;
+        interactive) evolve_interactive "$dir" ;;
+        detect)      evolve_detect "$dir" ;;
+        status)      evolve_status "$dir" ;;
+        stage)       evolve_stage "$dir" ;;
+        submit)      evolve_submit "$dir" ;;
+        track)       evolve_track "$dir" ;;
         *)
             err "Unknown evolve action: $action"
             return 1
@@ -3156,50 +3202,141 @@ cmd_evolve() {
     esac
 }
 
+# ─── CMD: dashboard (smart default) ──────────────────────────────────────────
+cmd_dashboard() {
+    local dir="${1:-.}"
+    local selfmodel_dir="$dir/.selfmodel"
+
+    # If no .selfmodel/ exists, suggest init and show short help
+    if [[ ! -d "$selfmodel_dir" ]]; then
+        echo "selfmodel $SELFMODEL_VERSION"
+        echo ""
+        printf '  %bNo .selfmodel/ found in this project.%b\n' "$YELLOW" "$NC"
+        printf '  %b-> Next: selfmodel init%b\n' "$CYAN" "$NC"
+        echo ""
+        cmd_help_short
+        return 0
+    fi
+
+    # Run existing status display
+    cmd_status "$dir"
+    echo ""
+
+    # Suggest next action based on project state
+    local suggestion=""
+
+    # Check for DELIVERED contracts awaiting review
+    # Contract format: "## Status\nDELIVERED" — match standalone DELIVERED line
+    local delivered_count=0
+    if [[ -d "$selfmodel_dir/contracts/active" ]]; then
+        delivered_count=$(grep -rl '^DELIVERED$' "$selfmodel_dir/contracts/active/"*.md 2>/dev/null \
+            | wc -l | tr -d ' ') || delivered_count=0
+    fi
+    if [[ "$delivered_count" -gt 0 ]]; then
+        suggestion="$delivered_count delivered Sprint(s) awaiting review. Run: /selfmodel:review"
+    fi
+
+    # Check if plan.md exists
+    if [[ -z "$suggestion" && ! -f "$selfmodel_dir/state/plan.md" ]]; then
+        suggestion="No orchestration plan found. Run: /selfmodel:plan"
+    fi
+
+    # Check evolution overdue
+    if [[ -z "$suggestion" && -f "$selfmodel_dir/state/team.json" ]]; then
+        local current_sprint last_review
+        current_sprint=$(jq -r '.current_sprint // 0' "$selfmodel_dir/state/team.json" 2>/dev/null)
+        last_review=$(jq -r '.evolution.last_review_sprint // 0' "$selfmodel_dir/state/team.json" 2>/dev/null)
+        local next_detect=$((last_review + 10))
+        if [[ "$next_detect" -le "$current_sprint" ]]; then
+            suggestion="Evolution review overdue. Run: selfmodel evolve"
+        fi
+    fi
+
+    # Default: all clear
+    if [[ -z "$suggestion" ]]; then
+        suggestion="All clear. Run /selfmodel:sprint for next task"
+    fi
+
+    printf '  %b-> Next:%b %s\n' "$CYAN" "$NC" "$suggestion"
+    echo ""
+    cmd_help_short
+}
+
+# ─── Help: short reference (8 lines, used by dashboard) ──────────────────────
+cmd_help_short() {
+    printf '%b%-24s  %-30s%b\n' "$BOLD" "Terminal" "Claude Code" "$NC"
+    echo "────────────────────────  ──────────────────────────────"
+    printf "%-24s  %-30s\n" "selfmodel init"           "/selfmodel:init"
+    printf "%-24s  %-30s\n" "selfmodel status"         "/selfmodel:status"
+    printf "%-24s  %-30s\n" "selfmodel update"         "/selfmodel:loop"
+    printf "%-24s  %-30s\n" "selfmodel evolve"         "/selfmodel:evolve"
+    printf "%-24s  %-30s\n" ""                         "/selfmodel:plan"
+    printf "%-24s  %-30s\n" ""                         "/selfmodel:sprint"
+    printf "%-24s  %-30s\n" ""                         "/selfmodel:review"
+    printf "%-24s  %-30s\n" "selfmodel --help"         "Full reference"
+}
+
+# ─── Help: full detailed reference (used by --help) ─────────────────────────
+cmd_help_full() {
+    echo "selfmodel $SELFMODEL_VERSION — AI Agent Team Workflow"
+    echo ""
+    echo "Usage: selfmodel [command] [directory]"
+    echo ""
+    echo "Commands:"
+    echo "  init       Initialize selfmodel (idempotent — safe to re-run on existing projects)"
+    echo "  update     Update playbook files to latest version"
+    echo "               --remote    Fetch latest from GitHub (instead of local templates)"
+    echo "               --version   Specify version/tag (default: main)"
+    echo "  status     Show team health dashboard"
+    echo "  evolve     Evolution pipeline (interactive by default)"
+    echo "               --detect    Scan diffs against upstream baseline"
+    echo "               --status    Show pipeline status, timestamps, PR URLs"
+    echo "               --stage     Classify CANDIDATE entries (Stage/Reject/Keep)"
+    echo "               --submit    Submit staged patches as upstream PR"
+    echo "               --track     Monitor submitted PR statuses"
+    echo ""
+    echo "Flags:"
+    echo "  -v, --version   Show version"
+    echo "  -h, --help      Show this help message"
+    echo ""
+    echo "Aliases (backward compat):"
+    echo "  adapt      -> init (deprecated, prints warning)"
+    echo "  dashboard  -> (no args)"
+    echo ""
+    echo "Claude Code Slash Commands:"
+    echo "  /selfmodel:init       Initialize selfmodel"
+    echo "  /selfmodel:plan       Create or update orchestration plan"
+    echo "  /selfmodel:sprint     Create Sprint contract and dispatch agent"
+    echo "  /selfmodel:review     Review a delivered Sprint"
+    echo "  /selfmodel:loop       Auto-orchestration loop"
+    echo "  /selfmodel:status     View team status and quality trends"
+    echo ""
+    echo "Examples:"
+    echo "  selfmodel                                    # Smart dashboard (default)"
+    echo "  selfmodel init                               # Initialize in current directory"
+    echo "  selfmodel init ./my-project                  # Initialize in specific directory"
+    echo "  selfmodel update                             # Update playbook from local templates"
+    echo "  selfmodel update --remote                    # Fetch latest from GitHub"
+    echo "  selfmodel update --remote --version v0.3.0   # Fetch specific version"
+    echo "  selfmodel evolve                             # Interactive evolution pipeline"
+    echo "  selfmodel evolve --detect                    # Detection scan only"
+    echo "  selfmodel evolve --status                    # View evolution pipeline status"
+}
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 main() {
-    local cmd="${1:-help}"
+    local cmd="${1:-dashboard}"
     shift || true
 
     case "$cmd" in
-        init)    check_deps; cmd_init "$@" ;;
-        adapt)   check_deps; cmd_adapt "$@" ;;
-        update)  check_deps; cmd_update "$@" ;;
-        status)  check_deps; cmd_status "$@" ;;
-        evolve)  check_deps; cmd_evolve "$@" ;;
-        version) cmd_version "$@" ;;
-        -v)      cmd_version "$@" ;;
-        --version) cmd_version "$@" ;;
-        help|--help|-h)
-            echo "selfmodel $SELFMODEL_VERSION — AI Agent Team Workflow"
-            echo ""
-            echo "Usage: selfmodel <command> [directory]"
-            echo ""
-            echo "Commands:"
-            echo "  init     Initialize selfmodel in a new or existing project"
-            echo "  adapt    Adapt selfmodel to an existing project (non-destructive)"
-            echo "  update   Update playbook files to latest version"
-            echo "             --remote    Fetch latest from GitHub (instead of local templates)"
-            echo "             --version   Specify version/tag (default: main)"
-            echo "  status   Show team health dashboard"
-            echo "  evolve   Evolution pipeline: detect improvements, classify, submit upstream"
-            echo "             --detect    Scan diffs against upstream baseline (default)"
-            echo "             --status    Show pipeline status, timestamps, PR URLs"
-            echo "             --stage     Interactively classify CANDIDATE entries"
-            echo "             --submit    Submit staged patches as upstream PR"
-            echo "             --track     Monitor submitted PR statuses"
-            echo "  version  Show version"
-            echo ""
-            echo "Examples:"
-            echo "  selfmodel init                       # Initialize in current directory"
-            echo "  selfmodel init ./my-project          # Initialize in specific directory"
-            echo "  selfmodel adapt                      # Adapt to existing project"
-            echo "  selfmodel update                     # Update playbook from local templates"
-            echo "  selfmodel update --remote            # Fetch latest from GitHub (main branch)"
-            echo "  selfmodel update --remote --version v0.3.0  # Fetch specific version"
-            echo "  selfmodel evolve                     # Detect evolution candidates"
-            echo "  selfmodel evolve --status            # View evolution pipeline status"
-            ;;
+        dashboard)       check_deps; cmd_dashboard "$@" ;;
+        init|setup)      check_deps; cmd_init "$@" ;;
+        adapt)           check_deps; cmd_adapt "$@" ;;
+        update|sync)     check_deps; cmd_update "$@" ;;
+        status)          check_deps; cmd_status "$@" ;;
+        evolve)          check_deps; cmd_evolve "$@" ;;
+        version|-v|--version) cmd_version "$@" ;;
+        help|--help|-h)  cmd_help_full ;;
         *)
             err "Unknown command: $cmd"
             err "Run 'selfmodel --help' for usage."
