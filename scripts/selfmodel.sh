@@ -850,6 +850,420 @@ cmd_status() {
     echo "═══════════════════════════════════════════════════"
 }
 
+# ─── Generate Wiki ───────────────────────────────────────────────────────────
+
+# Code file extensions used to detect whether a directory contains code
+WIKI_CODE_EXTENSIONS='*.py *.js *.ts *.tsx *.jsx *.go *.rs *.rb *.java *.kt *.swift *.c *.cpp *.h *.cs *.php *.sh *.lua *.ex *.exs *.zig *.nim *.ml *.hs *.scala *.clj'
+
+# Directories excluded from module scanning
+WIKI_EXCLUDE_PATTERN='^(\.|node_modules|__pycache__|\.venv|venv|vendor|dist|build|\.selfmodel|\.claude|\.github|\.vscode|\.idea|\.next|\.nuxt|coverage|tmp|temp|\.cache|\.turbo|target|out|bin|obj)$'
+
+# Generate a skeleton module page for a detected code directory
+generate_module_page() {
+    local wiki_dir="$1"
+    local project_dir="$2"
+    local module_name="$3"
+
+    local module_file="$wiki_dir/modules/${module_name}.md"
+
+    # Collect up to 10 key files in this module (by extension)
+    local key_files=()
+    local find_args=()
+    for ext in $WIKI_CODE_EXTENSIONS; do
+        find_args+=(-name "$ext" -o)
+    done
+    # Remove trailing -o
+    unset 'find_args[-1]'
+
+    while IFS= read -r f; do
+        [[ -z "$f" ]] && continue
+        # Make path relative to project root
+        local rel="${f#"$project_dir"/}"
+        key_files+=("$rel")
+    done < <(find "$project_dir/$module_name" -maxdepth 3 -type f \( "${find_args[@]}" \) 2>/dev/null | head -10)
+
+    cat > "$module_file" << MODEOF
+# ${module_name}
+
+## Overview
+Module detected during project scaffolding. Update this section with a description of what \`${module_name}/\` contains and its role in the architecture.
+
+## Key Files
+MODEOF
+
+    if [[ ${#key_files[@]} -gt 0 ]]; then
+        for kf in "${key_files[@]}"; do
+            echo "- \`${kf}\`" >> "$module_file"
+        done
+    else
+        echo "_No code files detected at scan depth._" >> "$module_file"
+    fi
+
+    cat >> "$module_file" << 'MODEOF2'
+
+## See Also
+_Link related wiki pages here._
+
+## Last Updated
+Sprint 0 (init)
+MODEOF2
+}
+
+# Main wiki generation function — called during init
+generate_wiki() {
+    local dir="$1"
+    local wiki_dir="$dir/.selfmodel/wiki"
+
+    # Ensure wiki subdirectories exist
+    mkdir -p "$wiki_dir"/{modules,decisions,patterns,entities}
+
+    # ── 1. schema.md — page format conventions ──────────────────────────────
+    cat > "$wiki_dir/schema.md" << 'SCHEMAEOF'
+# Wiki Schema
+
+Page format conventions for the project wiki.
+
+---
+
+## Page Structure
+
+Every wiki page follows this skeleton:
+
+```markdown
+# Title
+
+## Overview
+Brief description: what this is, why it exists.
+
+## Details
+In-depth content, code references, diagrams.
+
+## See Also
+- [[related-page]]
+- [[another-page]]
+
+## Last Updated
+Sprint <N> (<date or "init">)
+```
+
+## Cross-Link Syntax
+
+Use double-bracket wiki links to reference other pages:
+- `[[modules/auth]]` — link to a module page
+- `[[decisions/001-database-choice]]` — link to a decision record
+- `[[patterns/repository-pattern]]` — link to a pattern page
+- `[[entities/user]]` — link to an entity page
+
+## Naming Conventions
+
+- **Module pages**: `modules/<directory-name>.md` — one page per code-bearing top-level directory
+- **Decision records**: `decisions/<NNN>-<slug>.md` — numbered, append-only
+- **Pattern pages**: `patterns/<pattern-name>.md` — reusable design patterns
+- **Entity pages**: `entities/<entity-name>.md` — domain model entities
+
+## Update Rules
+
+1. When a Sprint modifies files in a module, the corresponding `modules/<name>.md` page should be updated.
+2. Architectural decisions should be recorded in `decisions/` with rationale and alternatives considered.
+3. Updates are logged in `log.md` with timestamp, Sprint reference, and summary.
+4. The `index.md` must stay in sync with actual pages — run `selfmodel adapt` to reconcile.
+
+## Lint Rules
+
+1. **Page count vs module count**: every code-bearing directory should have a wiki page.
+2. **Stale pages**: pages not updated in the last 10 Sprints are flagged.
+3. **Broken internal links**: `[[target]]` must resolve to an existing `.md` file.
+4. **Empty pages**: pages with 3 or fewer non-blank lines are flagged as stubs.
+
+## Auto-Sync Spec
+
+Post-merge, compare `git diff --name-only` against `wiki/modules/`. If code in a module directory changed but its wiki page was not updated, append a warning entry to `log.md`:
+```
+[<timestamp>] WARN: <module> code changed in Sprint <N> but wiki page not updated
+```
+SCHEMAEOF
+
+    # ── 2. Scan for code-bearing directories ────────────────────────────────
+    local module_count=0
+    local module_names=()
+
+    for entry in "$dir"/*/; do
+        [[ ! -d "$entry" ]] && continue
+        local dirname
+        dirname=$(basename "$entry")
+
+        # Skip excluded directories
+        if [[ "$dirname" =~ $WIKI_EXCLUDE_PATTERN ]]; then
+            continue
+        fi
+
+        # Check if directory contains code files (up to depth 2)
+        local find_args=()
+        for ext in $WIKI_CODE_EXTENSIONS; do
+            find_args+=(-name "$ext" -o)
+        done
+        unset 'find_args[-1]'
+
+        local has_code
+        has_code=$(find "$entry" -maxdepth 2 -type f \( "${find_args[@]}" \) 2>/dev/null | head -1)
+        [[ -z "$has_code" ]] && continue
+
+        # Enforce max 20 modules
+        if [[ $module_count -ge 20 ]]; then
+            break
+        fi
+
+        generate_module_page "$wiki_dir" "$dir" "$dirname"
+        module_names+=("$dirname")
+        module_count=$((module_count + 1))
+    done
+
+    # ── 3. architecture.md from detect_stack results ─────────────────────────
+    local stacks_str="${DETECTED_STACKS[*]:-none}"
+    local frameworks_str="${DETECTED_FRAMEWORKS[*]:-none}"
+    local test_tools_str="${DETECTED_TEST_TOOLS[*]:-none}"
+
+    cat > "$wiki_dir/architecture.md" << ARCHEOF
+# Architecture
+
+## Overview
+Project architecture seeded from auto-detection. Update this page as the system evolves.
+
+## Project Type
+${DETECTED_TYPE:-unknown}
+
+## Tech Stack
+- **Languages/Runtimes**: ${stacks_str}
+- **Frameworks**: ${frameworks_str}
+- **Test Tools**: ${test_tools_str}
+
+## Directory Tree
+ARCHEOF
+
+    # Add top-level directory listing (non-hidden, non-excluded)
+    for entry in "$dir"/*/; do
+        [[ ! -d "$entry" ]] && continue
+        local dirname
+        dirname=$(basename "$entry")
+        if [[ "$dirname" =~ $WIKI_EXCLUDE_PATTERN ]]; then
+            continue
+        fi
+        echo "- \`${dirname}/\`" >> "$wiki_dir/architecture.md"
+    done
+
+    cat >> "$wiki_dir/architecture.md" << 'ARCHEOF2'
+
+## Key Architectural Decisions
+_Record decisions in `decisions/` and link them here._
+
+## See Also
+- [[modules/]] — per-module documentation
+- [[decisions/]] — architectural decision records
+
+## Last Updated
+Sprint 0 (init)
+ARCHEOF2
+
+    # ── 4. index.md listing all generated pages ─────────────────────────────
+    cat > "$wiki_dir/index.md" << 'INDEXHDR'
+# Wiki Index
+
+Auto-generated page index. Run `selfmodel adapt` to reconcile with actual pages.
+
+---
+
+## Core Pages
+- [[schema]] — page format conventions
+- [[architecture]] — project architecture overview
+- [[log]] — wiki change log
+
+## Module Pages
+INDEXHDR
+
+    for mod in "${module_names[@]}"; do
+        echo "- [[modules/${mod}]]" >> "$wiki_dir/index.md"
+    done
+
+    cat >> "$wiki_dir/index.md" << 'INDEXFTR'
+
+## Decision Records
+_None yet. Create `decisions/<NNN>-<slug>.md` to add._
+
+## Patterns
+_None yet. Create `patterns/<name>.md` to add._
+
+## Entities
+_None yet. Create `entities/<name>.md` to add._
+INDEXFTR
+
+    # ── 5. log.md with initial entry ─────────────────────────────────────────
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    cat > "$wiki_dir/log.md" << LOGEOF
+# Wiki Log
+
+Chronological record of wiki changes.
+
+---
+
+[${ts}] INIT: wiki created, ${module_count} module page(s) generated
+LOGEOF
+
+    ok "Wiki generated: ${module_count} module page(s), schema, architecture, index, log."
+}
+
+# Reconcile wiki during adapt — scan for new modules, update index and log
+reconcile_wiki() {
+    local dir="$1"
+    local wiki_dir="$dir/.selfmodel/wiki"
+
+    # Ensure wiki subdirectories exist
+    mkdir -p "$wiki_dir"/{modules,decisions,patterns,entities}
+
+    local new_count=0
+    local existing_modules=()
+    local all_modules=()
+
+    # Collect existing module pages (strip .md extension)
+    for f in "$wiki_dir"/modules/*.md; do
+        [[ -f "$f" ]] || continue
+        local name
+        name=$(basename "$f" .md)
+        existing_modules+=("$name")
+    done
+
+    # Scan for code-bearing directories
+    local total_scanned=0
+    for entry in "$dir"/*/; do
+        [[ ! -d "$entry" ]] && continue
+        local dirname
+        dirname=$(basename "$entry")
+
+        if [[ "$dirname" =~ $WIKI_EXCLUDE_PATTERN ]]; then
+            continue
+        fi
+
+        local find_args=()
+        for ext in $WIKI_CODE_EXTENSIONS; do
+            find_args+=(-name "$ext" -o)
+        done
+        unset 'find_args[-1]'
+
+        local has_code
+        has_code=$(find "$entry" -maxdepth 2 -type f \( "${find_args[@]}" \) 2>/dev/null | head -1)
+        [[ -z "$has_code" ]] && continue
+
+        if [[ $total_scanned -ge 20 ]]; then
+            break
+        fi
+
+        all_modules+=("$dirname")
+        total_scanned=$((total_scanned + 1))
+
+        # Check if module page already exists
+        local found=false
+        for existing in "${existing_modules[@]}"; do
+            if [[ "$existing" == "$dirname" ]]; then
+                found=true
+                break
+            fi
+        done
+
+        if ! $found; then
+            generate_module_page "$wiki_dir" "$dir" "$dirname"
+            new_count=$((new_count + 1))
+        fi
+    done
+
+    # Rebuild index.md with current state
+    cat > "$wiki_dir/index.md" << 'INDEXHDR'
+# Wiki Index
+
+Auto-generated page index. Run `selfmodel adapt` to reconcile with actual pages.
+
+---
+
+## Core Pages
+- [[schema]] — page format conventions
+- [[architecture]] — project architecture overview
+- [[log]] — wiki change log
+
+## Module Pages
+INDEXHDR
+
+    for mod in "${all_modules[@]}"; do
+        echo "- [[modules/${mod}]]" >> "$wiki_dir/index.md"
+    done
+
+    # Include any manually-created module pages not in the scan
+    for existing in "${existing_modules[@]}"; do
+        local in_all=false
+        for mod in "${all_modules[@]}"; do
+            if [[ "$mod" == "$existing" ]]; then
+                in_all=true
+                break
+            fi
+        done
+        if ! $in_all; then
+            echo "- [[modules/${existing}]]" >> "$wiki_dir/index.md"
+        fi
+    done
+
+    # Add decision, pattern, entity sections by scanning actual files
+    echo "" >> "$wiki_dir/index.md"
+    echo "## Decision Records" >> "$wiki_dir/index.md"
+    local has_decisions=false
+    for f in "$wiki_dir"/decisions/*.md; do
+        [[ -f "$f" ]] || continue
+        local name
+        name=$(basename "$f" .md)
+        echo "- [[decisions/${name}]]" >> "$wiki_dir/index.md"
+        has_decisions=true
+    done
+    if ! $has_decisions; then
+        echo "_None yet. Create \`decisions/<NNN>-<slug>.md\` to add._" >> "$wiki_dir/index.md"
+    fi
+
+    echo "" >> "$wiki_dir/index.md"
+    echo "## Patterns" >> "$wiki_dir/index.md"
+    local has_patterns=false
+    for f in "$wiki_dir"/patterns/*.md; do
+        [[ -f "$f" ]] || continue
+        local name
+        name=$(basename "$f" .md)
+        echo "- [[patterns/${name}]]" >> "$wiki_dir/index.md"
+        has_patterns=true
+    done
+    if ! $has_patterns; then
+        echo "_None yet. Create \`patterns/<name>.md\` to add._" >> "$wiki_dir/index.md"
+    fi
+
+    echo "" >> "$wiki_dir/index.md"
+    echo "## Entities" >> "$wiki_dir/index.md"
+    local has_entities=false
+    for f in "$wiki_dir"/entities/*.md; do
+        [[ -f "$f" ]] || continue
+        local name
+        name=$(basename "$f" .md)
+        echo "- [[entities/${name}]]" >> "$wiki_dir/index.md"
+        has_entities=true
+    done
+    if ! $has_entities; then
+        echo "_None yet. Create \`entities/<name>.md\` to add._" >> "$wiki_dir/index.md"
+    fi
+
+    # Append to log.md
+    local ts
+    ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+    echo "[${ts}] ADAPT: wiki reconciled, ${new_count} new module page(s) added, ${total_scanned} total modules" >> "$wiki_dir/log.md"
+
+    if [[ $new_count -gt 0 ]]; then
+        ok "Wiki reconciled: ${new_count} new module page(s) added."
+    else
+        ok "Wiki reconciled: no new modules detected."
+    fi
+}
+
 # ─── Generate Playbook ────────────────────────────────────────────────────────
 generate_playbook() {
     local dir="${1:-.}"
