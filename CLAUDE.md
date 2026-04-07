@@ -254,6 +254,7 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 | E2E 验证协议 v2 | `.selfmodel/playbook/e2e-protocol-v2.md` |
 | 混沌渗透测试（Rampage） | `/rampage` skill (`~/.claude/skills/rampage/SKILL.md`) |
 | Context checkpoint + reset protocol | `.selfmodel/playbook/context-protocol.md` |
+| Wiki protocol + page format | `.selfmodel/playbook/wiki-protocol.md` |
 
 ## Context Management
 
