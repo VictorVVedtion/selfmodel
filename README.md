@@ -34,6 +34,8 @@ git clone https://github.com/VictorVVedtion/selfmodel.git
 cd selfmodel && bash install.sh
 ```
 
+If `selfmodel` isn't found after install, open a new terminal or run `source ~/.zshrc`.
+
 ### 2. Setup
 
 ```bash
