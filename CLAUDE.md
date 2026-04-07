@@ -267,6 +267,7 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 2. Read .selfmodel/state/next-session.md (last handoff)
 3. Read .selfmodel/state/team.json (team state)
 4. Scan .selfmodel/contracts/active/ (pending contracts)
+4.5. Scan .selfmodel/wiki/index.md (wiki catalog — auto-injected by session-start hook)
 5. PRE-FLIGHT CHECK:
    a. git branch --show-current → MUST be "main", else STOP and fix
    b. git worktree list → MUST show only main, else merge/discard orphan branches
