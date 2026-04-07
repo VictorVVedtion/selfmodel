@@ -190,9 +190,13 @@ create_structure() {
     mkdir -p "$dir/.selfmodel/reviews"
     mkdir -p "$dir/.selfmodel/state"
     mkdir -p "$dir/.selfmodel/playbook"
+    mkdir -p "$dir/.selfmodel/wiki/modules"
+    mkdir -p "$dir/.selfmodel/wiki/decisions"
+    mkdir -p "$dir/.selfmodel/wiki/patterns"
+    mkdir -p "$dir/.selfmodel/wiki/entities"
 
     # .gitkeep for empty directories
-    for d in contracts/active contracts/archive inbox/gemini inbox/codex inbox/opus inbox/research inbox/evaluator inbox/e2e reviews; do
+    for d in contracts/active contracts/archive inbox/gemini inbox/codex inbox/opus inbox/research inbox/evaluator inbox/e2e reviews wiki/modules wiki/decisions wiki/patterns wiki/entities; do
         touch "$dir/.selfmodel/$d/.gitkeep"
     done
 }
