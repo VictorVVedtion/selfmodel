@@ -1,5 +1,5 @@
 ---
-description: "View selfmodel team status, active sprints, and quality trends"
+description: "View selfmodel team status (prefer CLI: selfmodel)"
 allowed-tools: ["Read", "Bash", "Glob"]
 ---
 
