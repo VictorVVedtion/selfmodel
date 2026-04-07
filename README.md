@@ -198,6 +198,16 @@ Every 10 completed sprints, selfmodel can turn validated local process improveme
 - **SUBMIT** — Package staged patches into an upstream PR after path audits and applicability checks. Human approval is required before any submission.
 - **TRACK** — Monitor open PRs and sync ACCEPTED, REJECTED, or CONFLICT states back into `evolution.jsonl`.
 
+### Project Wiki
+
+selfmodel auto-generates and maintains a project knowledge base at `.selfmodel/wiki/`. No separate command — wiki is woven into existing flows:
+
+- **`selfmodel init`** scaffolds wiki with detected module pages and architecture overview
+- **Session start hook** injects wiki index into Leader context automatically
+- **Sprint contracts** can declare `## Wiki Impact` for pages the agent should update
+- **Post-merge** (Step 7.6) detects stale wiki pages from code diffs
+- **`selfmodel status`** reports wiki health score (page count, staleness, completeness)
+
 ## Chaos Testing: /rampage
 
 `/rampage` is a standalone Claude Code skill that acts as the most chaotic, boundary-pushing user imaginable. It finds bugs that systematic QA never catches: race conditions, state corruption, navigation traps, input edge cases.

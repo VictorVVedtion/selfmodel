@@ -254,6 +254,7 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 | E2E 验证协议 v2 | `.selfmodel/playbook/e2e-protocol-v2.md` |
 | 混沌渗透测试（Rampage） | `/rampage` skill (`~/.claude/skills/rampage/SKILL.md`) |
 | Context checkpoint + reset protocol | `.selfmodel/playbook/context-protocol.md` |
+| Wiki protocol + page format | `.selfmodel/playbook/wiki-protocol.md` |
 
 ## Context Management
 
@@ -266,6 +267,7 @@ Contract template → read `.selfmodel/playbook/sprint-template.md`
 2. Read .selfmodel/state/next-session.md (last handoff)
 3. Read .selfmodel/state/team.json (team state)
 4. Scan .selfmodel/contracts/active/ (pending contracts)
+4.5. Scan .selfmodel/wiki/index.md (wiki catalog — auto-injected by session-start hook)
 5. PRE-FLIGHT CHECK:
    a. git branch --show-current → MUST be "main", else STOP and fix
    b. git worktree list → MUST show only main, else merge/discard orphan branches
@@ -348,6 +350,15 @@ selfmodel/
     ├── inbox/evaluator/               # Leader→Evaluator eval files
     ├── inbox/e2e/                     # Leader→E2E Agent v2 验证任务
     ├── artifacts/                     # 验证产物（E2E 截图/日志 + Rampage 韧性报告）
+    ├── wiki/                          # Project knowledge base (auto-managed)
+    │   ├── index.md                   # Content catalog
+    │   ├── log.md                     # Update log (append-only)
+    │   ├── schema.md                  # Page conventions
+    │   ├── architecture.md            # System overview
+    │   ├── modules/                   # Per-module pages
+    │   ├── decisions/                 # Architecture Decision Records
+    │   ├── patterns/                  # Code patterns
+    │   └── entities/                  # Key concepts
     ├── state/team.json                # Team state
     ├── state/next-session.md          # Session handoff
     ├── state/plan.md                  # Orchestration plan (phases + sprints)
