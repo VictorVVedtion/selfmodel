@@ -84,7 +84,9 @@ Claude Code 的自动 compaction 会压缩历史消息，但：
 
 | 信息类型 | 外部化目标 |
 |----------|-----------|
-| 架构决策 | `playbook/lessons-learned.md` |
+| 架构决策 | `wiki/decisions/` (ADR) + `playbook/lessons-learned.md` |
+| 模块知识 | `wiki/modules/<module>.md` |
+| 发现的模式 | `wiki/patterns/<pattern>.md` |
 | Sprint 进度 | `state/next-session.md` |
 | 团队状态 | `state/team.json` |
 | 质量评分 | `state/quality.jsonl` |
