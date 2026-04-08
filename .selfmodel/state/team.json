@@ -82,12 +82,14 @@
   },
   "evolution": {
     "last_review_sprint": 0,
-    "protocol_version": "0.2.0",
+    "protocol_version": "0.3.0",
     "experiments_active": []
   },
   "detected_stack": {
-    "type": "unknown",
-    "stacks": [],
+    "type": "library",
+    "stacks": [
+      "github-actions"
+    ],
     "frameworks": []
   },
   "skills_evaluated": {},

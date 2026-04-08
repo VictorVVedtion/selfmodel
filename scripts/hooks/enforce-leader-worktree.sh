@@ -67,21 +67,6 @@ if [[ "${NORMALIZED}" == .gitignore ]]; then
     exit 0
 fi
 
-# 7. Project infrastructure files (LICENSE, VERSION, CHANGELOG, etc.)
-if [[ "${NORMALIZED}" == LICENSE* || "${NORMALIZED}" == VERSION || "${NORMALIZED}" == CHANGELOG* ]]; then
-    exit 0
-fi
-
-# 8. .github/ directory (issue templates, PR templates, workflows)
-if [[ "${NORMALIZED}" == .github/* ]]; then
-    exit 0
-fi
-
-# 9. assets/ directory (visual assets, diagrams)
-if [[ "${NORMALIZED}" == assets/* ]]; then
-    exit 0
-fi
-
 # ── 白名单外：拦截 ──
 {
     echo "🚨 [Hook 拦截] 违反「Leader 不下场」规则"
