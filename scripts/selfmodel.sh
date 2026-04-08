@@ -1912,8 +1912,13 @@ HOOKEOF
   "hooks": {
     "SessionStart": [
       {
-        "type": "command",
-        "command": "bash scripts/hooks/session-start.sh"
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/hooks/session-start.sh"
+          }
+        ]
       }
     ],
     "PreToolUse": [
