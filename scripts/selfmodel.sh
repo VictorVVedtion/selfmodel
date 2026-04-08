@@ -1326,7 +1326,8 @@ INDEXHDR
 generate_playbook() {
     local dir="${1:-.}"
 
-    # sprint-template.md — universal
+    # sprint-template.md — only generate if missing (selfmodel update --remote overwrites)
+    if [[ ! -f "$dir/.selfmodel/playbook/sprint-template.md" ]]; then
     cat > "$dir/.selfmodel/playbook/sprint-template.md" << 'TMPLEOF'
 # Sprint <N>: <Title>
 
@@ -1356,6 +1357,7 @@ DRAFT → ACTIVE → DELIVERED → REVIEWED → MERGED | REJECTED
 - [ ] <File or feature 1>
 - [ ] <File or feature 2>
 TMPLEOF
+    fi
 
     # lessons-learned.md — universal skeleton
     if [[ ! -f "$dir/.selfmodel/playbook/lessons-learned.md" ]]; then
