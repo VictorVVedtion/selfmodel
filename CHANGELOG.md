@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.5.0] - 2026-04-11
+
+### Added
+- **Depth-First Workflow Enforcement** (`enforce-depth-gate.sh`) — hook-enforced gate blocking dispatch of standard/complex Sprints whose contracts lack real Code Tour + Architecture Context. Complex Sprints MUST complete Phase A (`understanding.md`) before Phase B implementation.
+- **Sprint Complexity Field** (`simple | standard | complex`) — determines required contract sections and dispatch protocol. Contracts gained `## Complexity`, `## Code Tour`, `## Architecture Context`, `## Understanding Checkpoint`, `## Files`, and `## Smoke Test` sections.
+- **Two-Phase Dispatch** for complex Sprints — Phase A produces `understanding.md` in the worktree, Leader validates, then Phase B implementation begins. Prevents drive-by implementation without codebase comprehension.
+- **Deep-Read Mode** — Leader extracts patterns to `.selfmodel/artifacts/` for complex Sprint dependencies, bridging Rule 7 ("no implementation") with the need to understand existing code.
+- **Iron Rule 19: Depth Gate** — hook-enforced, blocks dispatch at tool level when standard/complex contracts lack depth content.
+- **Iron Rule 20: Self-Dogfood** — selfmodel's own code changes MUST go through Sprint flow. `enforce-leader-worktree.sh` whitelist is a safety net, not a Rule 7 exemption. Only exception: `BYPASS_LEADER_RULES=1` emergency fix, which must be followed by a retroactive audit Sprint in the same session.
+- **Hook Drift Test** (`scripts/tests/test-hook-drift.sh`) — extracts canonical heredoc from `scripts/selfmodel.sh` and diffs against live hook files, exits non-zero on drift. Prevents silent hook regression during `selfmodel update`.
+- **Retroactive Audit Protocol** — `sprint-R{N}-retroactive.md` contracts for auditing commits that bypassed Sprint flow. First run audited v0.5.0 era (R1-R4) and wrote 4 rows to `quality.jsonl` (mean 6.83/10), archived to `.selfmodel/reviews/retroactive-v0.5.0-audit.{md,json}`.
+
+### Fixed
+- **enforce-leader-worktree.sh whitelist regression** (Sprint 7) — R4 (`f0410d7`) silently removed Rules 7/8/9 (LICENSE/VERSION/CHANGELOG, `.github/*`, `assets/*`) during canonical heredoc regen, freezing the release workflow for 3 days. Restored byte-for-byte from `f0410d7^`. First fully compliant dogfood Sprint — scored 9.15/10 vs retroactive mean 6.83 (+2.32 discipline dividend).
+- **`generate_playbook()` sprint-template.md overwrite** (R2) — added `if-not-exists` guard matching `dispatch-rules.md`/`quality-gates.md` pattern, preventing depth-gate fields from being wiped on every `selfmodel update`.
+- **`.claude/settings.json` hook entry format** (R3) — normalized PreToolUse hook structure.
+
+### Changed
+- **Lessons learned protocol** (`.selfmodel/playbook/lessons-learned.md`) — new v0.5.0 retroactive audit entry documenting "why Sprint discipline matters" with quantified +2.32 discipline dividend.
+
 ## [0.4.0] - 2026-04-07
 
 ### Added

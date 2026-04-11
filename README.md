@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://github.com/VictorVVedtion/selfmodel/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="MIT License"></a>
-  <img src="https://img.shields.io/badge/version-0.4.0-green.svg?style=flat-square" alt="Version 0.4.0">
+  <img src="https://img.shields.io/badge/version-0.5.0-green.svg?style=flat-square" alt="Version 0.5.0">
   <img src="https://img.shields.io/badge/agents-7_roles-8B5CF6.svg?style=flat-square" alt="7-Role Agent Team">
   <img src="https://img.shields.io/badge/isolation-git_worktree-D97706.svg?style=flat-square" alt="Git Worktree Isolation">
   <img src="https://img.shields.io/badge/platform-Claude_Code-000000.svg?style=flat-square&logo=anthropic" alt="Claude Code">
