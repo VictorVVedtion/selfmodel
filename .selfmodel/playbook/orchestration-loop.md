@@ -215,44 +215,83 @@ LOOP:
        Sprint content and project maturity. Skip for internal tools, config changes,
        documentation-only sprints.
 
-  7. ACT on each verdict (SERIAL MERGE — one at a time, in Sprint number order)
+  6.9. PRE-MERGE SMOKE TEST (v0.6.0 PR-era, runs on rebased worktree BEFORE push)
+       Why pre-merge: with gh auto-merge, post-merge revert = follow-up PR. Shift smoke
+       left. If smoke passes, push + PR. If smoke fails, don't push, downgrade to REVISE.
+
+       Run within 30 seconds, from the rebased worktree (after Step 7.a rebase):
+       a. Build check (if applicable):
+          npm run build 2>&1 | tail -5  OR  cargo build 2>&1 | tail -5  OR
+          bash -n scripts/selfmodel.sh (for shell-script-only projects)
+       b. Test check (if applicable):
+          npm test -- --bail 2>&1 | tail -10  OR  cargo test 2>&1 | tail -10
+       c. Diff sanity:
+          git diff origin/main --stat
+          (verify change scope matches Sprint deliverables)
+       d. Sprint-specific smoke (if declared in contract):
+          - Read contract ## Smoke Test section
+          - Execute each command from worktree root with 30s timeout
+          - Any command fail OR output mismatch expected → smoke FAIL
+       e. If any check fails:
+          - DO NOT push
+          - Final verdict downgrades ACCEPT → REVISE
+          - Write feedback: "Pre-merge smoke failed: <error>"
+          - Agent continues in same worktree
+       f. If all checks pass:
+          - Proceed to Step 7.e (push)
+          - Log: event=pre_merge_smoke sprint=<N> result=pass
+
+  7. ACT on each verdict (SERIAL PR LANDING — one PR at a time, in Sprint number order)
      - ACCEPT →
-         a. Rebase sprint branch onto current main HEAD (in worktree):
-            cd <worktree-path> && git rebase main
+         a. Rebase sprint branch onto remote main HEAD (in worktree):
+            cd <worktree-path>
+            git fetch origin main
+            git rebase origin/main
          b. If rebase conflict:
             - Re-dispatch Agent to resolve in worktree (Agent has task context)
             - If Agent unavailable: Leader resolves manually per file
             - NEVER use --theirs / --ours blindly
-         c. After clean rebase: merge into main
-            cd <main-repo> && git merge sprint/<N>-<agent> --no-ff -m "Sprint <N>: <title>"
-         d. Archive contract, cleanup worktree
-         e. plan.md Status → MERGED
-     - REVISE → write must_fix feedback, agent continues
+         c. Rename branch if harness-generated (e.g. worktree-agent-XXX → sprint/<N>-<agent>):
+            git branch -m sprint/<N>-<agent>
+         d. PRE-MERGE SMOKE TEST (see Step 6.9) — smoke runs on rebased worktree.
+            smoke fail → push blocked, final verdict downgrades to REVISE.
+         e. Push feature branch:
+            first push: git push -u origin sprint/<N>-<agent>
+            revise updates: git push --force-with-lease origin sprint/<N>-<agent>
+         f. Generate PR body from contract + verdicts:
+            write .selfmodel/reviews/sprint-<N>-pr-body.md
+            (template: title, verdict summary, files changed, AC checklist,
+             evaluator rationale, link to contract)
+         g. Create PR:
+            gh pr create \
+              --base main \
+              --head sprint/<N>-<agent> \
+              --title "Sprint <N>: <title>" \
+              --body-file .selfmodel/reviews/sprint-<N>-pr-body.md
+         h. Queue auto-merge:
+            PR_NUMBER=$(gh pr view --json number --jq .number)
+            gh pr merge "$PR_NUMBER" --merge --delete-branch --auto
+         i. Poll until PR reaches MERGED (5 min cap, see dispatch-rules.md Step 8):
+            while state != MERGED and attempts < 60: sleep 5
+            MERGED → proceed to j
+            CLOSED without MERGED → BLOCKED, notify user
+            timeout → BLOCKED, notify user, record in orchestration.log
+         j. Local main fast-forward to remote:
+            cd <main-repo>
+            git fetch origin main
+            git merge --ff-only origin/main
+         k. Archive contract, cleanup local worktree + branch:
+            git worktree remove <worktree-path>
+            git branch -D sprint/<N>-<agent>
+         l. plan.md Status → MERGED
+     - REVISE → write must_fix feedback to worktree, Agent continues (same worktree).
+                 If PR already pushed: updates will land via step e after next ACCEPT.
                  plan.md Status → ACTIVE (retry count +1)
-     - REJECT → discard branch
+     - REJECT → gh pr close <PR_NUMBER> --delete-branch (if pushed), then:
+                 git worktree remove <worktree-path>
+                 git branch -D sprint/<N>-<agent>
                  plan.md Status → PENDING (redo)
                  If 3 consecutive REJECTs → Status → BLOCKED, notify user
-
-  7.5. POST-MERGE SMOKE TEST (after each merge in Step 7)
-       Run within 30 seconds:
-       a. Build check (if applicable):
-          npm run build 2>&1 | tail -5  OR  cargo build 2>&1 | tail -5
-       b. Test check (if applicable):
-          npm test -- --bail 2>&1 | tail -10  OR  cargo test 2>&1 | tail -10
-       c. Diff sanity:
-          git diff HEAD~1 --stat  (verify change scope matches Sprint deliverables)
-       d. If build OR test fails:
-          - git revert HEAD --no-edit  (revert the merge commit)
-          - Sprint status → REVISE (not MERGED)
-          - Write feedback: "Post-merge regression detected: <error>"
-          - Agent must fix in worktree, re-rebase, re-merge
-       e. Sprint-specific smoke test (if declared in contract):
-          - Read contract ## Smoke Test section
-          - Execute each command with 30s timeout
-          - If any command fails or output mismatches expected:
-            same handling as build/test failure (revert + REVISE)
-          - If no ## Smoke Test section: skip (no block)
-          - Log: event=smoke_test sprint=<N> result=pass|fail|skipped
 
   7.6. POST-MERGE WIKI SYNC (after smoke test passes)
        a. Extract changed files: git diff HEAD~1 --name-only

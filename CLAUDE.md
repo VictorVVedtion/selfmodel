@@ -193,21 +193,29 @@ git worktree list  # must show only main worktree
 
 4. Agent executes in worktree (fully isolated)
 
-5. Leader reviews ON MAIN: git diff main...sprint/<N>-<agent>
+5. Leader reviews ON MAIN: git diff origin/main...<branch>
 
-6. Verdict (SERIAL MERGE — one Sprint at a time)
-   Pass  → rebase onto latest main → merge to main → post-merge smoke test → archive
+6. Verdict (SERIAL PR LANDING — one PR at a time, v0.6.0 PR-era)
+   Pass  → rebase onto origin/main → pre-merge smoke → push → gh pr create →
+           gh pr merge --auto → poll until MERGED → ff-only pull → archive
    Fail  → write feedback → agent continues in same worktree
 
-   Rebase-then-merge flow (see dispatch-rules.md for full details):
-   a. cd <worktree> && git rebase main
+   Rebase-Then-Merge flow (see dispatch-rules.md for full details):
+   a. cd <worktree> && git fetch origin main && git rebase origin/main
    b. If conflict → Agent resolves (has context) | Leader reviews manually
-   c. cd <main-repo> && git merge sprint/<N>-<agent> --no-ff
-   d. Post-merge: build + test must pass, else git revert + REVISE
+   c. git branch -m sprint/<N>-<agent> (if harness named it worktree-agent-XXX)
+   d. Pre-merge smoke: build + test + contract smoke block (see orchestration-loop.md Step 6.9)
+      smoke fail → no push, downgrade to REVISE
+   e. git push -u origin sprint/<N>-<agent> (or --force-with-lease on revisions)
+   f. gh pr create --base main --head sprint/<N>-<agent> --title "..." --body-file ...
+   g. gh pr merge <N> --merge --delete-branch --auto  (CI gates the merge)
+   h. Poll PR state until MERGED (5 min cap)
+   i. cd <main-repo> && git fetch origin main && git merge --ff-only origin/main
 
 7. Cleanup (MANDATORY — same session)
-   /git-worktree remove sprint-<N>-<agent>
-   git branch -d sprint/<N>-<agent>
+   git worktree remove <worktree-path>
+   git branch -D sprint/<N>-<agent>
+   (remote branch auto-deleted by `gh pr merge --delete-branch`)
 ```
 
 ### Absolute Prohibitions
