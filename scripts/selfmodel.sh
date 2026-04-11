@@ -5,7 +5,7 @@
 # Requires: jq (for JSON processing). macOS + Linux.
 set -eo pipefail
 
-SELFMODEL_VERSION="0.3.0"
+SELFMODEL_VERSION="0.5.0"
 SELFMODEL_REPO="https://raw.githubusercontent.com/VictorVVedtion/selfmodel/main"
 
 # ─── Colors ───────────────────────────────────────────────────────────────────
