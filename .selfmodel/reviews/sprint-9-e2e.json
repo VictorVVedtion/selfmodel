@@ -1,0 +1,53 @@
+{
+  "sprint": "9",
+  "depth": "quick",
+  "verifier": "leader-self-run",
+  "fallback_reason": "Opus Agent channel hit rate limit (resets 5am PT), Gemini not dispatched for E2E because e2e-protocol-v2 restricts Gemini fallback to implicit ACs only. Sprint 9 explicit ACs are all deterministic bash checks, which Leader can execute read-only without independence loss.",
+  "verdict": "PASS",
+  "explicit_acs": {
+    "AC1_version_file": {
+      "status": "PASS",
+      "evidence": "VERSION=0.5.0 (stripped of whitespace)"
+    },
+    "AC2_cli_constant": {
+      "status": "PASS",
+      "evidence": "scripts/selfmodel.sh line 8 = SELFMODEL_VERSION=\"0.5.0\""
+    },
+    "AC3_readme_badge": {
+      "status": "PASS",
+      "evidence": "README.md line 13 contains both version-0.5.0-green and alt=\"Version 0.5.0\""
+    },
+    "AC4_changelog_verbatim": {
+      "status": "PASS",
+      "evidence": "diff /tmp/sprint9-actual.md /tmp/sprint9-reference.md → empty (19 lines each, byte-identical). awk extraction from CHANGELOG.md[## [0.5.0] .. ## [0.4.0]) vs awk extraction from inbox task file first markdown block."
+    },
+    "AC5_historical_markers": {
+      "status": "PASS",
+      "evidence": "grep -c 'v0.3.0' README.md = 5 (threshold ≥5). Historical markers preserved on lines 83, 190, 358, 373, 430 (line 280 is '(0.3.0)' without v-prefix, so not counted in this grep but also untouched)."
+    },
+    "AC6_runtime_version": {
+      "status": "PASS",
+      "evidence": "bash scripts/selfmodel.sh --version | head -1 = 'selfmodel 0.5.0'"
+    },
+    "AC7_changelog_order": {
+      "status": "PASS",
+      "evidence": "[0.5.0] at line 5, [0.4.0] at line 25, 5<25"
+    },
+    "AC8_selfmodel_untouched": {
+      "status": "PASS",
+      "evidence": "git diff --name-only main...worktree-agent-accecd4a | grep -c '^.selfmodel/' = 0"
+    },
+    "AC9_file_count": {
+      "status": "PASS",
+      "evidence": "git diff --name-only main...worktree-agent-accecd4a | wc -l = 4 (CHANGELOG.md, README.md, VERSION, scripts/selfmodel.sh)"
+    }
+  },
+  "implicit_acs": {
+    "bash_syntax": {
+      "status": "PASS",
+      "evidence": "bash -n scripts/selfmodel.sh exit 0"
+    }
+  },
+  "notes": "All 9 explicit + 1 implicit = 10/10 verifications PASS. Run from main repo at 621578d, targeting feature worktree at /Users/vvedition/Desktop/selfmodel/.claude/worktrees/agent-accecd4a branch worktree-agent-accecd4a commit 802d375. Gemini Evaluator (independent channel) also returned ACCEPT 8.15/10 with byte-identical CHANGELOG verification, confirming the Leader self-run result.",
+  "timestamp": "2026-04-11T11:40:00Z"
+}
