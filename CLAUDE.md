@@ -33,6 +33,7 @@ Only code, CLI commands, and file content may be in English.
 17. **Rolling Batch** — Max parallel Sprints defaults to 3 (configurable in `dispatch-config.json`). ACTIVE + DELIVERED count MUST NOT exceed the cap. Never fan-out all pending sprints at once. Rhythm: dispatch 3 → merge 3 → dispatch 3. **Enforced by `enforce-dispatch-gate.sh` hook** — dispatch blocked at tool level if exceeded.
 18. **Convergence File Gate** — Files listed in `dispatch-config.json` → `convergence_files[]` force serialization. Two Sprints touching the same convergence file MUST NOT be ACTIVE simultaneously. This is a hard gate enforced by hook, not advisory.
 19. **Depth Gate** — Standard/complex Sprints MUST have real Code Tour (not template placeholders) and Architecture Context in the contract before dispatch. Complex Sprints MUST complete Phase A (understanding.md) before Phase B (implementation). Deep-Read dependencies MUST be DONE before dependent Sprints dispatch. **Enforced by `enforce-depth-gate.sh` hook** — dispatch blocked at tool level if contract lacks depth content.
+20. **Self-Dogfood** — selfmodel 仓库自己的代码修改也必须走 Sprint 流程：contract → worktree → Agent → Evaluator → merge。`enforce-leader-worktree.sh` 白名单（`.selfmodel/`、`.claude/`、`scripts/`、`*.md` 等）是 hook 的最后一道安全网，**不是** Rule 7 的豁免通道。"我知道怎么修"冲动针对 selfmodel 自己代码库时等同于 Rule 7 违规。唯一例外：`BYPASS_LEADER_RULES=1` 紧急修复，且必须在同一会话内以 retroactive audit Sprint 补文档。违例先例：v0.5.0 到 f0410d7 期间 4 个直提 main commit（R1-R4），retroactive 均分 6.83；首次合规 Sprint 7 拿到 9.15，+2.32 分的纪律红利。
 
 ### Leader Decision Principles
 
@@ -342,6 +343,7 @@ Human approval required before any PR submission. Full protocol: `playbook/evolu
 - **No raw CLI calls** — Complex prompts without file buffer
 - **No main-branch edits** — Agent code changes MUST be in worktrees
 - **No serial execution** — Independent tasks MUST be parallelized (within rolling batch cap, Rule 17)
+- **No direct-to-main commits on selfmodel codebase** — Leader MUST NOT commit to `scripts/`, `scripts/hooks/`, `skill/scripts/`, or any production code file without going through a Sprint (Rule 20). Whitelist in `enforce-leader-worktree.sh` is the safety net, not the license.
 
 ## Directory Structure
 

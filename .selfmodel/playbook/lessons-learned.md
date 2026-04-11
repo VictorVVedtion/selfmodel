@@ -94,3 +94,14 @@ Leader 每 10 sprint 审查 hook-intercepts.log，提取有价值的经验升级
   - CLAUDE.md 新增 Iron Rule 17 (Rolling Batch) 和 Rule 18 (Convergence File Gate)
   - `.claude/settings.json` 注册新 hook 到 Bash matcher 链
 - **Result**: 待验证
+
+### v0.5.0 Retroactive Audit: selfmodel 没在自己身上 dogfood
+- **Sprint**: R1-R4（retroactive）+ Sprint 7（首次合规 dogfooding）
+- **Category**: architecture
+- **Lesson**: selfmodel 定义了 Rule 7/14/15/16/17/18/19 这一整套纪律给用户项目用，但 selfmodel 自己的代码开发（v0.5.0 到 f0410d7 4 个 commit）全部直提 main。直接后果：R4 (`f0410d7`) 在 "regenerated from canonical heredoc" 的幌子下静默删除了 `enforce-leader-worktree.sh` Rules 7/8/9（LICENSE/VERSION/.github/assets 白名单），regression 在 main 上带病运行 3 天，发布和 CI 流程实质冻结。retroactive audit 给 R1-R4 打出平均 6.83 分，其中 R4 仅 5.15（REVISE）。如果走了 Sprint 流程，Evaluator 会在 merge 前 catch 住 canonical heredoc 和 live hook 的 drift——因为这正是 Integration Depth 维度应当检测的。
+- **Action**:
+  - 事后：生成 retroactive contracts `sprint-R{1,2,3,4}-retroactive.md`，派独立 Evaluator 评分，写入 quality.jsonl（首次有数据），归档为 `.selfmodel/reviews/retroactive-v0.5.0-audit.md`
+  - 系统性修复：CLAUDE.md 新增 Rule 20 (Self-Dogfood)，明确 selfmodel 自己代码库的修改不得绕过 Sprint 流程；`ABSOLUTELY FORBIDDEN` 段新增 "No direct-to-main commits on selfmodel codebase"
+  - 工具层修复：Sprint 7 派 Opus Agent 走完整流程修复 R4 regression，新增 `scripts/tests/test-hook-drift.sh` 锁死 canonical heredoc 和 live hook 的字节一致性，未来 `selfmodel update` 无法再重现此 bug
+  - Evaluator mutation test 证明 drift test 真实生效：注入 `# DRIFT` → test exit 1 + diff，恢复 → exit 0
+- **Result**: 改善验证中 — Sprint 7 拿到 9.15/10 ACCEPT，比 retroactive 平均分 +2.32。纪律红利已量化。Sprint 9（depth gate Agent tool 覆盖）+ Sprint 10（VERSION 同步）将继续走相同流程作为第二、第三次验证
