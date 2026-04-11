@@ -1717,6 +1717,21 @@ if [[ "${NORMALIZED}" == .gitignore ]]; then
     exit 0
 fi
 
+# 7. Project infrastructure files (LICENSE, VERSION, CHANGELOG, etc.)
+if [[ "${NORMALIZED}" == LICENSE* || "${NORMALIZED}" == VERSION || "${NORMALIZED}" == CHANGELOG* ]]; then
+    exit 0
+fi
+
+# 8. .github/ directory (issue templates, PR templates, workflows)
+if [[ "${NORMALIZED}" == .github/* ]]; then
+    exit 0
+fi
+
+# 9. assets/ directory (visual assets, diagrams)
+if [[ "${NORMALIZED}" == assets/* ]]; then
+    exit 0
+fi
+
 # ── 白名单外：拦截 ──
 {
     echo "🚨 [Hook 拦截] 违反「Leader 不下场」规则"
@@ -1724,7 +1739,7 @@ fi
     echo "被拦截文件: ${FILE_PATH}"
     echo ""
     echo "Leader 角色只负责编排、审查、仲裁，不直接修改业务代码。"
-    echo "白名单范围: .selfmodel/、.claude/、scripts/、playbook/、*.md、.gitignore"
+    echo "白名单范围: .selfmodel/、.claude/、scripts/、playbook/、*.md、.gitignore、LICENSE/VERSION/CHANGELOG、.github/、assets/"
     echo ""
     echo "正确做法:"
     echo "  1. 在 .selfmodel/contracts/active/ 下创建 Sprint 合约"
