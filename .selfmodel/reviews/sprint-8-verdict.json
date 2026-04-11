@@ -1,0 +1,102 @@
+{
+  "sprint_id": "sprint-8",
+  "sprint_title": "Codify Rule 20 — Self-Dogfood",
+  "branch": "worktree-agent-aadaf9eb",
+  "commit": "efbf4194944a06b3772cc28cd6659d4ae90031ee",
+  "evaluator": "claude-opus-4-6 (independent agent)",
+  "timestamp": "2026-04-11T00:00:00Z",
+  "scores": {
+    "functionality": 10.0,
+    "code_quality": 10.0,
+    "design_taste": 8.0,
+    "completeness": 10.0,
+    "integration_depth": 9.0,
+    "originality": 7.0
+  },
+  "weights": {
+    "functionality": 0.25,
+    "code_quality": 0.20,
+    "design_taste": 0.15,
+    "completeness": 0.15,
+    "integration_depth": 0.15,
+    "originality": 0.10
+  },
+  "weighted_score": 9.15,
+  "verdict": "ACCEPT",
+  "verbatim_check": {
+    "text_1_rule_20": {
+      "location": "CLAUDE.md line 36",
+      "byte_identical": true,
+      "notes": "Inserted line equals contract Text 1 byte-for-byte. Verified via Python string equality on extracted line vs regex-extracted contract block."
+    },
+    "text_2_forbidden_bullet": {
+      "location": "CLAUDE.md line 346",
+      "byte_identical": true,
+      "notes": "Inserted line equals contract Text 2 byte-for-byte."
+    },
+    "text_3_lessons_entry": {
+      "location": ".selfmodel/playbook/lessons-learned.md lines 98-108",
+      "byte_identical": true,
+      "notes": "11-line block (heading + 4 fields + 4-line Action sub-list + Result) matches contract Text 3 byte-for-byte across every line."
+    }
+  },
+  "scope_check": {
+    "files_touched": [
+      "CLAUDE.md",
+      ".selfmodel/playbook/lessons-learned.md"
+    ],
+    "files_count": 2,
+    "additions": 13,
+    "deletions": 0,
+    "pure_insertion": true,
+    "out_of_scope_files": []
+  },
+  "placement_check": {
+    "rule_20_between_19_and_leader_decision_principles": true,
+    "rule_19_line": 35,
+    "rule_20_line": 36,
+    "leader_decision_principles_line": 38,
+    "forbidden_bullet_immediately_after_no_serial_execution": true,
+    "no_serial_execution_line": 345,
+    "no_direct_to_main_line": 346,
+    "lessons_entry_at_end_after_fan_out_hell": true,
+    "fan_out_entry_line": 84,
+    "new_entry_line": 98,
+    "lessons_file_total_lines": 108
+  },
+  "monotonic_iron_rules": {
+    "iron_rules_block_numbers": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
+    "is_monotonic_1_to_20": true,
+    "no_gaps": true
+  },
+  "format_consistency": {
+    "forbidden_bullet_matches_sibling_style": true,
+    "forbidden_bullet_pattern": "- **<bold phrase>** — <explanation>",
+    "lessons_entry_matches_schema": true,
+    "lessons_schema": ["Sprint", "Category", "Lesson", "Action", "Result"]
+  },
+  "auto_reject_triggers": {
+    "todo_introduced": false,
+    "fixme_introduced": false,
+    "mock_data_introduced": false,
+    "swallowed_exception_introduced": false,
+    "placeholder_text_introduced": false,
+    "any_triggered": false
+  },
+  "ai_slop_check": {
+    "added_unsolicited_explanations": false,
+    "rephrased_approved_text": false,
+    "added_helpful_comments": false
+  },
+  "must_fix": [],
+  "should_fix": [],
+  "notes": [
+    "Pure documentation insertion Sprint executed flawlessly. All three Leader-approved text blocks appear byte-for-byte identical in their target locations.",
+    "Diff stat: 2 files, 13 insertions(+), 0 deletions(-). Matches agent self-report exactly.",
+    "Rule 20 sits at CLAUDE.md line 36, immediately after Rule 19 (line 35), with one blank line separator before '### Leader Decision Principles' (line 38). Iron Rules block reads 1..20 with no gaps.",
+    "FORBIDDEN bullet sits at CLAUDE.md line 346, immediately after 'No serial execution' (line 345). Format matches sibling pattern '- **<phrase>** — <explanation>' exactly.",
+    "Lessons-learned entry sits at lines 98-108, appended after the '11-Sprint Fan-Out Merge Hell' entry with a single blank line separator. Schema (Sprint/Category/Lesson/Action/Result) matches existing entries.",
+    "Originality scored 7/10 by design — pure insertion of pre-approved text caps Originality. Functionality and Code Quality earn full marks for verbatim discipline. Integration Depth at 9 because the new content integrates with existing Iron Rules numbering, FORBIDDEN list grammar, and lessons-learned schema without any drift.",
+    "No auto-reject triggers, no AI slop, no scope creep. This is what Rule 20 self-validation looks like."
+  ]
+}

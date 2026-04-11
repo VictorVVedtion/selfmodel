@@ -1,0 +1,169 @@
+[
+  {
+    "sprint": "R1",
+    "commit_sha": "302f9aa",
+    "evaluator": "opus-agent",
+    "auto_reject_triggered": false,
+    "auto_reject_reasons": [],
+    "rationale": {
+      "functionality": "All 10 declared acceptance criteria are visibly delivered in the diff. enforce-depth-gate.sh (289 lines, new file) implements Gate 4 (Code Tour quality), Gate 4b (Architecture Context), Gate 5 (Deep-Read dependency via plan.md parsing) and Gate 6 (understanding.md presence + min line check, complex Phase B only), with simple-sprint short-circuit and BYPASS_DEPTH_GATE escape hatch. .claude/settings.json registers the hook on the existing PreToolUse Bash matcher entry. quality-gates.md flips from 5- to 6-dimension scoring with the new Integration Depth column at 15% and reweights all anchors and the formula consistently (anchor weighted recomputes to 8.85≈8.9 and 3.8). dispatch-rules.md gains Deep-Read mode, Two-Phase Dispatch (Phase A/B), Code Tour extraction protocol with concrete CLI templates per agent. orchestration-loop.md gains Step 1.5 convergence pre-detection and Step 7.5 smoke-test execution with 30s timeout. evaluator-prompt.md gains Section 2.5 Integration Context plus updated weight formula and JSON schema. CLAUDE.md adds Rule 19 Depth Gate, the Rule 7 'Clarification' permitting Deep-Read, the 6-dim quality table, and the artifacts directory entry. selfmodel.sh emits stubs for both enforce-dispatch-gate.sh and enforce-depth-gate.sh in fresh installs and registers them in the generated settings.json. The skill/scripts mirror is identical (289 lines). Concrete coverage gap: the hook's IS_AGENT detector only inspects Bash tool commands containing the literal strings 'gemini' or 'codex' — Opus Agent dispatches go through the Agent tool, never reach a Bash matcher, and therefore bypass Gate 4/5/6 entirely. Phase A detection is regex-based on the command string ('phase.?a|understand.*only|理解阶段|只读') which is brittle. These are gaps in the depth-gate's promise but not unmet ACs.",
+      "code_quality": "set -euo pipefail at the top of the new hook. Every jq invocation has a 2>/dev/null fallback. The hook exits 0 on every legitimate ambiguity (jq missing, empty stdin, no command, non-agent tool, sprint-num undetectable, contract not found) — fail-open is the right call for a hook to avoid wedging Leader workflows. Bilingual stderr error messages explain the violation, show a 120-char command preview, point at the contract path, and document remediation steps and the BYPASS env var — direct match to the existing enforce-leader-worktree.sh and enforce-agent-rules.sh style. Heredoc-stderr blocks use the same { ...; } >&2 idiom as siblings. Iron Rules: no TODO/FIXME/HACK strings, no mock data, no swallowed exceptions, no hardcoded credentials. AI Slop check: no excessive comments on obvious code, no unnecessary abstraction, no synonym soup, no flattery. Two minor Code Quality issues: (1) auto-reject rule #6 names — `for f in ...` and `for dr in ${DR_DEPS}` use 1-2 char loop variables outside the i/j/k exemption, but this is universally idiomatic shell and the brief exempts rule #10 for shell, so I record it as a should_fix not a Grade-F trigger; (2) `eval echo \"${WORKTREE_PATH}\"` on line ~240 is a code-injection smell — input is ostensibly trusted (parsed from Claude's own Bash command), but `eval` on parsed substrings is a discipline violation worth fixing. Numeric subshell pattern `$(cmd 2>/dev/null || echo 0)` is borderline but functions correctly because of the trailing pipe semantics. Slight duplication between Gate 4 (Code Tour) and Gate 4b (Architecture Context) extraction — could be one helper.",
+      "design_taste": "The hook splits gates 4/5/6 with banner comments and explains intent in the file header — readable like prose. Bilingual error messages give Leader a copy-pasteable remediation path rather than an opaque 'blocked'. BYPASS via env var matches the established pattern (BYPASS_LEADER_RULES, BYPASS_DEPTH_GATE) — no flag soup. Two-Phase Dispatch primitive is well-chosen: it externalizes 'understanding' as a tangible file artifact so Leader can verify it before committing context. Code Tour as a sprint-template section enforces the discipline at write-time rather than at review-time. The Rule 7 Clarification is a clean intervention — it preserves the No-Implementation rule while permitting research, which is exactly what the Rivercore postmortem demanded. Smoke Test as an optional contract section scales with sprint complexity. Naming: enforce-depth-gate.sh follows the enforce-<what>-gate.sh convention. Variable names CODE_TOUR_CONTENT, HAS_REAL_ARCH, UNDERSTANDING_LINES read clearly. The sprint-template.md gains 6 distinct sections with explicit 'simple/standard/complex' applicability annotations — discipline without bureaucracy. Slight taste cost: Phase A detection by free-text regex is fragile and feels improvised compared to the rest of the design.",
+      "completeness": "Main paths covered: simple early-exit, bypass env, jq missing, contract missing, no sprint number, all three gates with informative failures, complex-sprint Phase A vs B branching, understanding.md presence + min-line content gate. Branch coverage gaps: (1) Hook only matches Bash tool calls and string-checks for 'gemini'/'codex'. Opus Agent dispatches via the Agent tool never trigger this hook — that is a real coverage hole because Opus is the model used for the most complex sprints, exactly the population the gate is supposed to protect. (2) Phase A/B detection is keyword-based and false-negatives easily ('Phase A' in any non-trigger context, or any complex Phase B that happens to mention '理解阶段' in passing). (3) Gate 5 Deep-Read parsing assumes a precise plan.md format (### Deep-Read DR1: / - Status:) and silently passes on any deviation — fail-open is correct but undocumented. (4) The 'plan.md missing' branch is implicit (the outer if [[ -f ${PLAN_FILE} ]]) — silent skip. (5) `${UNDERSTANDING_LINES}` may contain whitespace from the `|| echo 0` fallback in some shells, causing the [[ -lt 10 ]] arithmetic comparison to misbehave on non-bash shells. (6) Convergence pre-detection in orchestration-loop.md is described but no actual script implementation exists — it's a Leader-protocol step, not a hook. The smoke test handler in orchestration-loop.md says 'Read contract ## Smoke Test section / Execute each command with 30s timeout' but doesn't specify how to capture and compare 'Expected' output. The Phase A timeout-does-not-count-against-Sprint-timeout note is a policy without an enforcement mechanism. None of these are blockers but in aggregate they keep Completeness around 7.",
+      "integration_depth": "Excellent fit with the rest of selfmodel. enforce-depth-gate.sh mirrors enforce-leader-worktree.sh exactly: same shebang, `set -euo pipefail`, BYPASS env var, jq fallback, stdin reader, 🚨 stderr header, bilingual remediation steps, exit 0/2 contract. The cross-cutting reweighting from 5 to 6 dimensions is applied consistently in quality-gates.md (formula, anchors, JSON example, jsonl example), evaluator-prompt.md (rationale schema, scores schema, weighted formula, anchor recomputation), and CLAUDE.md (table). The new sprint-template.md sections cleanly slot between Context and Constraints without disturbing Files/Deliverables which other code paths depend on. dispatch-rules.md grows by adding Deep-Read Mode and Two-Phase Dispatch as new sub-sections without breaking the existing routing-table format. orchestration-loop.md inserts Step 1.5 and 4g/7.5e in numbered positions consistent with the existing step taxonomy. selfmodel.sh's hook-stub generation matches the existing _backup_hook + heredoc + chmod pattern and registers the hooks in the generated settings.json under the same Bash matcher. The skill/scripts/enforce-depth-gate.sh mirror is byte-identical (both 289 lines). Naming follows conventions (snake_case shell vars, kebab-case markdown, PascalCase 'Code Tour'/'Architecture Context'). Minor friction: orchestration-loop.md's convergence pre-detection step is described in pseudocode rather than referencing a script, which is inconsistent with the Step 7's 'verify-delivery.sh' style.",
+      "originality": "Two-Phase Dispatch with file-buffer understanding.md is the strongest idea: it makes 'understanding' a verifiable artifact rather than a vibe. The Deep-Read Mode formalization (Leader research → .selfmodel/artifacts/<topic>.md → downstream Sprint inputs) cleanly resolves the Rule 7 ambiguity exposed by Rivercore. Convergence pre-detection by file-frequency-table is a simple, mechanical heuristic that should work well in practice. Code Tour as a contract section is borrowed from CodeTour conventions but adapted to file-buffer agents. Smoke Test attached to contracts is straightforward but useful because it makes regression checks declarative rather than ad-hoc. The integration of the new 6th dimension and the recomputed anchors is workmanlike rather than clever — but the anchor recomputation is correct and demonstrates careful arithmetic. Not paradigm-shifting, but every primitive added is the right size and lives in the right place."
+    },
+    "scores": {
+      "functionality": 8,
+      "code_quality": 8,
+      "design_taste": 8,
+      "completeness": 7,
+      "integration_depth": 8,
+      "originality": 8
+    },
+    "weighted": 7.85,
+    "verdict": "ACCEPT",
+    "must_fix": [],
+    "should_fix": [
+      "scripts/hooks/enforce-depth-gate.sh: extend Gate 4/5/6 coverage to Opus Agent dispatches. Bash matcher + 'gemini'/'codex' string check misses every Agent-tool dispatch, which is exactly the model used for the most complex sprints the gate is meant to protect. Either add a parallel hook on a different matcher or move the gate into the Leader's pre-dispatch protocol with hook-side enforcement of contract presence.",
+      "scripts/hooks/enforce-depth-gate.sh ~line 240: replace `eval echo \"${WORKTREE_PATH}\"` with parameter expansion (`\"${WORKTREE_PATH/#\\~/$HOME}\"`) to remove the eval-injection smell.",
+      "scripts/hooks/enforce-depth-gate.sh: rename loop variables `f` and `dr` to `contract_file` and `dep_id` to clear auto-reject rule #6 even though shell idiom exempts them.",
+      "scripts/hooks/enforce-depth-gate.sh: extract the duplicated `sed -n '/^## .../,/^## /{...}'` section-extraction logic into a helper function (used 4 times for Code Tour, Arch Context, Dependencies, Status).",
+      ".selfmodel/playbook/orchestration-loop.md Step 1.5: convergence pre-detection is described in pseudocode but no script exists. Either add scripts/detect-convergence.sh or downgrade to a Leader-protocol step explicitly.",
+      ".selfmodel/playbook/orchestration-loop.md Step 7.5e (smoke test): specify how to capture and compare 'Expected: ...' output from the contract, otherwise the test will only check exit codes and miss output regressions.",
+      "Process: the 959-line v0.5.0 cross-cutting change should have gone through a Sprint contract and an independent Evaluator before merging — no Evaluator ran on this diff before merge."
+    ],
+    "praise": [
+      "Bilingual stderr remediation messages on every gate failure — Leader gets a copy-pasteable fix path, not an opaque 'blocked'.",
+      "BYPASS_DEPTH_GATE env var matches the established BYPASS_LEADER_RULES pattern — no flag soup.",
+      "Anchor recomputation in quality-gates.md and evaluator-prompt.md is arithmetically correct and consistent across both files (8.85≈8.9 high, 3.8 low).",
+      "Two-Phase Dispatch externalizes understanding.md as a verifiable artifact — clean primitive that closes the Rivercore gap.",
+      "Hook-stub generation in selfmodel.sh prints a friendly 'run selfmodel update --remote for full version' message instead of silently emitting incomplete code.",
+      "skill/scripts/enforce-depth-gate.sh mirror is byte-identical to scripts/hooks/enforce-depth-gate.sh — install path stays in sync."
+    ]
+  },
+  {
+    "sprint": "R2",
+    "commit_sha": "2bfaba0",
+    "evaluator": "opus-agent",
+    "auto_reject_triggered": false,
+    "auto_reject_reasons": [],
+    "rationale": {
+      "functionality": "Tiny, surgical fix. AC1 (if-not-exists guard around sprint-template.md heredoc): visibly added lines 1329 and 1360 of selfmodel.sh, the heredoc is now wrapped in `if [[ ! -f \"$dir/.selfmodel/playbook/sprint-template.md\" ]]; then ... fi` with the closing fi on its own line. AC2 (remote update still syncs): not negatively affected because the change only touches generate_playbook(), not the --remote codepath that pulls from GitHub. Verifying it doesn't break --remote requires reading the rest of the script, which I did spot-check — generate_playbook() is called from update_local() not from the remote sync path, so the guard doesn't gate remote updates. AC3 (restore sprint-template.md from v0.5.0 state): the v0.5.0 sections (Code Tour, Architecture Context, Pattern Examples, Complexity, Understanding Checkpoint, Smoke Test) are present in the heredoc body of this commit (verified by inspecting the post-2bfaba0 file content). AC4 (consistency with dispatch-rules.md / quality-gates.md guard pattern): yes, identical `if [[ ! -f X ]]; then ... fi` shape. All four ACs are satisfied.",
+      "code_quality": "Three lines of net change (1 comment, 1 if, 1 fi). Iron Rules: no TODO, no mock, no swallowed exceptions, no hardcoded credentials, no anti-patterns. The new comment (`only generate if missing (selfmodel update --remote overwrites)`) accurately documents the contract. AI Slop check: no hits. The `if/fi` is correctly paired and indented at the function level (not the heredoc level), which is the right scope.",
+      "design_taste": "The comment is informative and short. The guard sits at exactly the same indentation level as sibling guards in generate_playbook(), making the protection pattern repeatable and visible. The body of the heredoc is left at its original indent (column 4) rather than being re-indented inside the new if-block — this is the right call because the heredoc body is interpreted literally, but a reader unfamiliar with shell scoping might find it visually odd. Minor taste imperfection but principled.",
+      "completeness": "What is missing: (1) no test or shellcheck CI step exercising the guard, so a future regression has nothing to catch it; (2) no audit pass over the rest of generate_playbook() to find other unconditionally-overwritten files (the audit notes in the contract explicitly call this out: 'Bug fix 性质明确，应该有 test case 防回归，没有'); (3) no log/info message to the user that the local template was preserved (selfmodel update should arguably announce 'sprint-template.md preserved'); (4) the comment says '--remote overwrites' but doesn't link to where the overwrite happens; (5) the fix doesn't solve the underlying class problem (other heredoc-generated files in the same function may have the same issue). Completeness suffers most because the fix is correct-but-narrow.",
+      "integration_depth": "Matches the exact pattern dispatch-rules.md and quality-gates.md guards use — same `if [[ ! -f X ]]; then ... fi` shape, same indentation discipline. Variable expansion and quoting (`\"$dir/.selfmodel/playbook/sprint-template.md\"`) match the rest of generate_playbook(). No naming break. The fix ports the existing protocol consistency directly. This is a textbook example of fitting in.",
+      "originality": "There is no room for originality in a 3-line bug fix. The pattern is borrowed from sibling guards as it should be — predictable, not creative. Score reflects scope, not quality."
+    },
+    "scores": {
+      "functionality": 9,
+      "code_quality": 8,
+      "design_taste": 7,
+      "completeness": 6,
+      "integration_depth": 8,
+      "originality": 6
+    },
+    "weighted": 7.6,
+    "verdict": "ACCEPT",
+    "must_fix": [],
+    "should_fix": [
+      "scripts/selfmodel.sh generate_playbook(): audit the rest of the function for other heredocs that should follow the same if-not-exists guard pattern — the contract's audit notes call this out as a known gap.",
+      "Add a regression test: a tiny shell test that runs `selfmodel update` twice in a fixture project and asserts that a hand-edited sprint-template.md is preserved.",
+      "scripts/selfmodel.sh: emit an info() log line when sprint-template.md is preserved during update so users see what selfmodel decided.",
+      "Process: this fix bypassed the Sprint flow and merged directly to main. A 4-line bug fix is a borderline call but the contract should have at least an Evaluator pass — 'no Evaluator ran' is a real should_fix per the contract's own audit notes."
+    ],
+    "praise": [
+      "Smallest possible diff that solves the stated bug — no scope creep.",
+      "Exactly matches the protective pattern used by sibling guards (dispatch-rules.md, quality-gates.md, lessons-learned.md).",
+      "Comment explains both what and why in one line."
+    ]
+  },
+  {
+    "sprint": "R3",
+    "commit_sha": "dd07f19",
+    "evaluator": "opus-agent",
+    "auto_reject_triggered": false,
+    "auto_reject_reasons": [],
+    "rationale": {
+      "functionality": "Material gap with the contract claims. The diff modifies ONLY scripts/selfmodel.sh — converting the SessionStart heredoc fragment from the flat `{type, command}` schema to the nested `{matcher, hooks[]}` schema. AC2 (template generator emits correct format): satisfied. AC3 (next selfmodel update doesn't rewrite the wrong format): follows from AC2. BUT — verification against parent commits proves AC1 (live `.claude/settings.json` already in correct format) and AC4 (no validation error on session start) were ALREADY TRUE at the parent of dd07f19. I checked: `git show dd07f19^:.claude/settings.json` shows the live file already had the nested `{matcher: \"\", hooks: [{type, command}]}` shape. So the contract's AC1 (live file fix) is vacuously true and was not done by R3. The contract itself hedges this in audit notes (`(implied: .claude/settings.json — 本仓库配置文件，不在 git 追踪里可能)`) but the file is in fact tracked (R1's diff edits it). Either the live file was fixed in a separate uncommitted action and lost from history, or the contract overstates R3's scope. The actual work R3 does (template generator fix) is small but correct. I score functionality on what the diff achieves: 1 of 4 ACs done by this commit, 2 follow trivially, 1 (live file) was pre-existing — net partial credit.",
+      "code_quality": "8 lines added, 2 removed, all inside a heredoc that emits JSON. JSON syntax is correct: outer object with `matcher: \"\"` and `hooks: [{type: command, command: ...}]` — matches the schema used by the PreToolUse entry directly above it. Iron Rules: no TODO, no mock, no swallowed exception, no anti-pattern. AI Slop check: clean. The change is mechanical but precise.",
+      "design_taste": "Brings SessionStart format into structural alignment with PreToolUse in the same heredoc, which is the right call for consistency. Indentation is correct relative to surrounding lines (12 spaces for the inner object, 10 for the outer). No new comment was added to explain why the wrapper is needed — a one-line reason would have been welcome but is not required.",
+      "completeness": "Significant gaps. (1) No regression test for hook schema — the contract's own audit notes call this out as missing. (2) No verification that the live `.claude/settings.json` matches the new template (turns out it already did — but that's not visible from the diff alone). (3) No audit of other hook entries in the heredoc that might have the same issue. (4) No mention of the schema source (Claude Code hook format documentation). (5) The diff doesn't add any validation step at install time to confirm settings.json is well-formed JSON after the merge. The fix is correct but solves only the surface symptom.",
+      "integration_depth": "Format now consistent with PreToolUse entries in the same selfmodel.sh heredoc. Schema matches the Claude Code hook contract. Pattern match good. The change touches one well-scoped area and doesn't ripple. Reuses indentation conventions of the existing heredoc.",
+      "originality": "Trivial schema correction — no room for originality, and none was expected. Score reflects scope, not quality."
+    },
+    "scores": {
+      "functionality": 6,
+      "code_quality": 8,
+      "design_taste": 7,
+      "completeness": 5,
+      "integration_depth": 8,
+      "originality": 6
+    },
+    "weighted": 6.7,
+    "verdict": "REVISE",
+    "must_fix": [],
+    "should_fix": [
+      "Clarify the contract: AC1 (live `.claude/settings.json` fix) is satisfied by the parent commit, not by R3. Either rewrite AC1 to scope it to the template generator only, or document where the live file was actually fixed.",
+      "scripts/selfmodel.sh generate_hooks(): add a post-write JSON validation step (`jq empty < settings.json`) so a malformed schema is caught at install time rather than at session start.",
+      "Add a unit test that loads the generated settings.json and asserts that every hook entry has the {matcher, hooks[]} structure (catches future schema regressions).",
+      "Process: like R2, this 9-line fix bypassed the Sprint flow and had no Evaluator pass. A schema fix specifically deserves a verification pass because the failure mode is silent.",
+      "Add a one-line comment in the heredoc explaining why SessionStart needs the matcher+hooks wrapper (reference Claude Code's hook schema docs)."
+    ],
+    "praise": [
+      "Correct schema alignment with the adjacent PreToolUse entries — structurally consistent.",
+      "Minimal diff, no scope creep.",
+      "Indentation matches the surrounding heredoc precisely."
+    ]
+  },
+  {
+    "sprint": "R4",
+    "commit_sha": "f0410d7",
+    "evaluator": "opus-agent",
+    "auto_reject_triggered": false,
+    "auto_reject_reasons": [],
+    "rationale": {
+      "functionality": "Critical AC failure that the contract mislabels as passing. AC1 (team.json detected_stack.type unknown→library + stacks: [github-actions]): visibly satisfied in the diff. AC2 (team.json evolution.protocol_version 0.2.0→0.3.0): visibly satisfied. AC3 (enforce-leader-worktree.sh diff is net -15 lines): satisfied on the line-count metric. AC4 (hook 行为未回归 / leader-worktree 保护仍有效): **FAILED**. I compared `git show f0410d7^:scripts/hooks/enforce-leader-worktree.sh` with the post-commit file and confirmed the deleted block contains three previously-active whitelist rules: (7) `LICENSE* | VERSION | CHANGELOG*` were exit-0 allowed; (8) `.github/*` was exit-0 allowed; (9) `assets/*` was exit-0 allowed. After R4, edits to all of those paths trigger the Leader-bites-the-leash interception. That is not a no-op regeneration — it is a behavioral revert of three deliberate whitelist additions. I cross-checked the canonical heredoc template in `git show f0410d7:scripts/selfmodel.sh` (lines 1645-1740) and the template indeed only has 6 rules. So 'regenerated from canonical heredoc' is technically accurate, but the canonical heredoc was never updated to absorb the manual additions. The contract claim 'hook 行为未回归' is therefore factually false. This is the most important finding in the entire audit. Additionally, AC1+AC2 (team.json) and AC3+AC4 (hook regen) are two unrelated chores bundled into one chore commit — bundling reduces reviewability without adding value.",
+      "code_quality": "The diff itself contains no anti-patterns: no TODO, no mock, no swallowed exception, no hardcoded credentials. The team.json edit is a straight value swap. The hook edit is pure deletion. AI Slop check: clean (the deleted block is not commented-out code, it was live whitelist logic). Code quality of the surviving lines is unchanged from the canonical template, which itself is fine.",
+      "design_taste": "The commit message says 'selfmodel update regenerated team.json + leader-worktree hook' — it frames a behavioral revert as an automatic side-effect of `selfmodel update`. Mixing two unrelated chores into one commit (state file regen + hook regen) is a smell. More importantly, the message does not acknowledge that previously-merged manual additions (LICENSE/VERSION/CHANGELOG/.github/assets) are being reverted — a reader scanning git log would have no way to know that hook behavior changed. The right design move is either (a) update the canonical heredoc template to include those three rules and then regenerate, or (b) split the commit and call out the deletions explicitly with a justification. Doing neither is the worst option.",
+      "completeness": "Multiple gaps. (1) No verification step that LICENSE/.github/*/assets/* should now be blocked again — that decision was never relitigated. (2) No update to the canonical template to absorb the manual rules. (3) No test/audit confirming the hook still allows the standard whitelist (`.selfmodel/`, `.claude/`, `scripts/`, `playbook/`, `*.md`, `.gitignore`). (4) No explanation in either the commit message or contract for why those three rules were originally added (they were added for a reason — typically Leader-managed infra files). (5) No log/CHANGELOG entry that the policy changed. (6) The contract's audit notes already flag this concern: '`-15 lines` 引人注意：删掉了什么？是死代码还是功能减少？没有 Evaluator 验证'. The auditor's intuition was correct — it was functionality, not dead code.",
+      "integration_depth": "The post-R4 hook now matches the canonical heredoc template — that's consistent in one direction, but the deeper integration question is whether the canonical template should have absorbed the additions in the first place. The team.json schema update (detected_stack + protocol_version) is well-formed JSON and matches the existing schema. No naming breaks. But the act of regenerating from a stale template instead of updating the template is the wrong direction of integration: it loses information.",
+      "originality": "Chore commit, no design space."
+    },
+    "scores": {
+      "functionality": 4,
+      "code_quality": 7,
+      "design_taste": 5,
+      "completeness": 4,
+      "integration_depth": 6,
+      "originality": 5
+    },
+    "weighted": 5.15,
+    "verdict": "REVISE",
+    "must_fix": [
+      {
+        "file": "scripts/hooks/enforce-leader-worktree.sh",
+        "line": "67-82",
+        "issue": "R4 silently deleted three previously-active whitelist rules (LICENSE/VERSION/CHANGELOG, .github/*, assets/*) by 'regenerating from canonical heredoc template' that never absorbed those additions. AC4 ('hook 行为未回归') is factually false: edits to LICENSE, VERSION, CHANGELOG, .github/* and assets/* are now intercepted by the Leader-bites-the-leash gate when they were previously allowed. Either restore the three rules in both the live file and the canonical heredoc in selfmodel.sh, or document the deliberate policy reversal in the commit/contract and confirm it's intentional.",
+        "severity": "major"
+      },
+      {
+        "file": "scripts/selfmodel.sh",
+        "line": "1646-1737",
+        "issue": "The canonical heredoc template for enforce-leader-worktree.sh is missing the LICENSE/.github/assets whitelist rules. If the deletion in R4 was unintentional (which the AC wording suggests), this template is the source of the regression and must be updated to include the three rules so future `selfmodel update` runs do not re-delete them.",
+        "severity": "major"
+      }
+    ],
+    "should_fix": [
+      "Split commits like this: state file regeneration and hook regeneration are unrelated chores and should not share a commit.",
+      "Commit messages for chore: regen commits should explicitly diff against the previous file content and call out any deletions, not just describe the regeneration source.",
+      "Process: a chore commit that silently reverts behavior is exactly the case the Sprint+Evaluator flow is designed to catch. R4 had no Evaluator pass — the contract's own audit notes called this out: '没有 Evaluator 验证'.",
+      "Add a Leader-side preflight to `selfmodel update`: diff the live hook against the to-be-generated template and ask the user to confirm any deletions before applying."
+    ],
+    "praise": [
+      "team.json edits are minimal and correctly typed (string version, string array, no schema break).",
+      "JSON formatting of team.json preserves the existing 2-space indent style."
+    ]
+  }
+]
