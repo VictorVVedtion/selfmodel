@@ -24,9 +24,16 @@ __pycache__/
 *.py[cod]
 go/bin/
 
-# === Temporary state ===
+# === selfmodel workflow ephemeral (never commit) ===
+.selfmodel/inbox/*/*
+!.selfmodel/inbox/*/.gitkeep
+.selfmodel/contracts/active/*
+!.selfmodel/contracts/active/.gitkeep
 .selfmodel/state/*.tmp
 .selfmodel/state/*.local*
+.selfmodel/state/*.log
+.selfmodel/artifacts/*
+!.selfmodel/artifacts/.gitkeep
 
 # === Build artifacts ===
 dist/
